@@ -65,7 +65,7 @@ Not all of the original features are implemented in the Rust rewrite:
 
 - The Rust program will detect if the taskbar is using a light theme and invert the colors on the tray icon.
 
-- The Rust program has an alternative tray icon that only shows the current desktop index as the whole icon without and border or framing.
+- The Rust program has an alternative tray icon that only shows the current desktop index as the whole icon without any border or framing.
 
 - The Rust program has better performance when finding information about all open windows.
 
@@ -73,7 +73,7 @@ Not all of the original features are implemented in the Rust rewrite:
 
 - The Rust executable has inbuilt support for controlling virtual desktops but if a [`VirtualDesktopAccessor.dll`] file is found (by for example placing it next to the executable) then it will instead load that file and use it for controlling virtual desktops. Since the virtual desktop library need to be updated regularly to work with newer Windows versions this allows the executable to continue working without having to be recompiled by simply updating that DLL file.
 
-  - Note that some operations might have less performance when using the DLL file since not all features of the underlying library is exposed. Some differences are:
+  - Note that some operations might have worse performance when using the DLL file since not all features of the underlying library is exposed. Some differences are:
 
     - We need to regularly call the library to check if the number of virtual desktops have changed (i.e. to see if virtual desktops were created/deleted).
 
