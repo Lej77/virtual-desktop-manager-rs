@@ -1,0 +1,176 @@
+[package]
+name = "virtual-desktop-manager"
+version = "0.1.0"
+authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
+license = "MIT"
+edition = "2021"
+description = "A Win32 application that helps manage virtual desktops for Windows 10 and Windows 11"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = [
+    "nwg_high_dpi",
+    "tray_icon_hardcoded",
+    "tray_icon_with_background",
+    "tray_icon_text_only",
+    "logging",
+    "cli_commands",
+    "cli_help",
+    "cli_suggestions",
+    "winvd_static",
+    "winvd_dynamic",
+    "persist_settings",
+    "persist_filters",
+    "persist_filters_xml",
+    "serde_path_to_error",
+    "admin_startup",
+    "auto_start",
+]
+
+# A tray icon with only a digit and no background
+tray_icon_text_only = ["dep:image", "image?/ico"]
+# A tray icon with only a digit and no background (+2 MB binary size)
+tray_icon_text_only_alt = [
+    "dep:text-to-png",
+    "dep:image",
+    "image?/png",
+    "image?/ico",
+]
+# Hardcoded icons with backgrounds for desktop 1-9 (better quality than the generated ones)
+tray_icon_hardcoded = []
+# Generate icons with backgrounds for any desktop index
+tray_icon_with_background = [
+    "dep:image",
+    "dep:imageproc",
+    "dep:ab_glyph",
+    "image?/png",
+    "image?/ico",
+]
+
+nwg_high_dpi = ["native-windows-gui/high-dpi", "dep:muldiv"]
+
+# Write events to stderr
+logging = ["dep:tracing-log", "dep:tracing-subscriber"]
+
+# Request admin rights when started (+74 KB binary size)
+admin_startup = ["dep:deelevate"]
+# Create Task Scheduler tasks that starts program with Windows
+auto_start = ["dep:runas"]
+
+# Save and load settings
+persist_settings = ["dep:serde", "dep:serde_json", "persist_filters"]
+
+# Import and export filters:
+persist_filters = ["dep:serde", "dep:serde_json"]
+persist_filters_xml = ["dep:serde", "dep:quick-xml"]
+
+# Better errors when parsing of JSON/XML fails:
+serde_path_to_error = ["dep:serde_path_to_error"]
+
+# Handle commands when started with special CLI arguments (+182 KB binary size)
+cli_commands = ["dep:clap"]
+# Provide info about commands when using `--help` (+66 KB binary size)
+cli_help = [
+    # "clap?/color",
+    "clap?/help",
+    "clap?/usage",
+]
+# Better error messages when CLI argument parsing fails (+48 KB binary size)
+cli_suggestions = ["clap?/error-context", "clap?/suggestions"]
+
+# Include the virtual desktop library in the binary (+78 KB binary size)
+winvd_static = ["dep:winvd"]
+# Support loading the virtual desktop library dynamically at runtime from "VirtualDesktopAccessor.dll"
+# (this allows the binary to support newer Windows versions without being recompiled) (+25 KB binary size)
+winvd_dynamic = ["dep:libloading"]
+
+[dependencies]
+# Waiting for Windows 10 support upstream: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
+winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", rev = "de26f4379f6fef49e21fae0b60dd6cdbb5d38e41", features = [
+    "multiple-windows-versions",
+], optional = true }
+libloading = { version = "0.8", optional = true }
+
+# Use Win32 API for GUI to minimize the memory footprint:
+native-windows-gui = { version = "1.0.13", features = ["no-styling"] }
+native-windows-derive = "1.0.5"
+muldiv = { version = "0.2", optional = true } # Used by high-dpi code for native-windows-gui
+windows = { version = "0.56.0", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry", # For RegGetValueW
+    "Win32_UI_Controls", # For LVM_SORTITEMSEX
+    "Win32_System_LibraryLoader", # For GetModuleHandleW,
+    "Win32_UI_Input_KeyboardAndMouse", # For SetFocus
+] } # Manually handle some UI stuff + cast to types used by winvd
+
+# Dynamic tray icon (need to generate .ico format due to native-windows-gui):
+imageproc = { version = "0.24.0", default-features = false, optional = true } # Draw text to image. Alternative "text-to-png" (only generates new PNG so can't modify existing)
+image = { version = "0.25.0", default-features = false, optional = true }     # Used by imageproc and for ICO creation (could use the `ico` crate instead)
+ab_glyph = { version = "0.2.23", default-features = false, optional = true }  # Needed to select font for imageproc
+text-to-png = { version = "0.2.0", optional = true }                          # Can generate PNG from text but can't combine that with a background
+
+# Logging:
+tracing = "0.1.40"
+tracing-log = { version = "0.2.0", optional = true }
+tracing-subscriber = { version = "0.3.18", optional = true }
+
+# Serialization (settings and exported filters):
+serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
+serde_json = { version = "1.0", optional = true }
+quick-xml = { version = "0.36.1", features = ["serialize"], optional = true }
+serde_path_to_error = { version = "0.1.14", optional = true }
+
+# CLI (commands):
+clap = { version = "4.5.4", features = [
+    "std",
+    "derive",
+], default-features = false, optional = true }
+
+# Restart as admin (required to move windows of privileged processes):
+deelevate = { version = "0.2.0", optional = true } # More control over starting program as admin than `runas`
+# Start a subtask as admin (used to register elevated auto start):
+runas = { version = "1.0.0", optional = true }
+
+[build-dependencies]
+# Fixes incompatibility between the `native-windows-gui` and `windows` crates:
+# https://github.com/gabdube/native-windows-gui/issues/251
+# https://github.com/gabdube/native-windows-gui/issues/241
+#
+# Also adds icon to our exe:
+# https://stackoverflow.com/questions/75038925/how-to-link-an-icon-to-a-rust-windows-application
+embed-resource = "2.4.2"
+
+
+# Minimize binary size (went from about 1180 kb to 950 kb), see
+# https://github.com/johnthagen/min-sized-rust
+#
+# Note: can also rebuild std for about 30 kb smaller size with:
+# cargo +nightly build -Z build-std=std --target x86_64-pc-windows-msvc --release
+# Note: can remove location info for about 150kb smaller size (requires nightly) with:
+# $env:RUSTFLAGS="-Zlocation-detail=none"
+[profile.release]
+# Note: disabled opt-level = "z" since it causes miscompilation for the ListView in ConfigWindow
+#       (it can not be resorted because no OnListViewColumnClick event is received).
+# opt-level = "z"   # Optimize for size.
+
+# Note: disabled lto=true since it causes miscompilation for the nwg::Tab control.
+# lto = true
+
+codegen-units = 1
+
+# It seems like native-windows-gui has a lot of UB, consider moving to an alternative crate like `winsafe`
+# I got the following panic in a debug build with opt-level=1 when using nwg::Tab in a window:
+# native-windows-gui-1.0.13\src\controls\tabs.rs:761:29: attempt to add with overflow
+[profile.release.package.native-windows-gui]
+# opt-level=1 causes miscompilation for nwg::Tab
+# opt-level="z" causes miscompilation for nwg::ListView (it can not be re-sorted because no OnListViewColumnClick event is received)
+opt-level = 0
+codegen-units = 16
+
+# If we ever publish to crates.io:
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]

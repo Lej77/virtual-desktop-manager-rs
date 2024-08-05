@@ -1,0 +1,3 @@
+#define RT_MANIFEST 24
+1 RT_MANIFEST "virtual-desktop-manager.exe.manifest"
+2 ICON "src/icons/edges - transparent with white.ico"

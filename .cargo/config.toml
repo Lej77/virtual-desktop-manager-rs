@@ -1,0 +1,8 @@
+
+# https://gabdube.github.io/native-windows-gui/native-windows-docs/distribute.html
+# Which links to:
+# https://github.com/rust-lang/rfcs/blob/master/text/1721-crt-static.md
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-Ctarget-feature=+crt-static"]
+[target.i686-pc-windows-msvc]
+rustflags = ["-Ctarget-feature=+crt-static"]

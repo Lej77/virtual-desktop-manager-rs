@@ -1,0 +1,1 @@
+Register-ScheduledTask -TaskName $args[0] -Description $args[2] -Force -RunLevel Highest -Action (New-ScheduledTaskAction -Execute $args[1]) -Trigger (New-ScheduledTaskTrigger -AtLogon) -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -ExecutionTimeLimit 0)
