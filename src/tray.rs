@@ -66,6 +66,11 @@ pub struct TrayRoot {
     /// The program was started at approximately this time.
     first_created_at: Option<Instant>,
 
+    /// Initial virtual desktop count might be incorrect if program is started with Windows.
+    #[nwg_control(parent: window)]
+    #[nwg_events(OnNotice: [Self::notify_check_desktop_count])]
+    recheck_virtual_desktop_init: FastTimerControl,
+
     need_rebuild: Cell<bool>,
 }
 impl TrayRoot {
@@ -91,10 +96,28 @@ impl TrayRoot {
     }
 
     fn notify_startup_rebuild(&self) {
+        let Some(tray_ui) = self.tray_ui.get() else {
+            return;
+        };
         tracing::info!(
             "Rebuilding tray icon incase the taskbar didn't exist when the program was started"
         );
-        self.need_rebuild.set(true);
+        tray_ui.notify_explorer_restart();
+    }
+
+    fn notify_check_desktop_count(&self) {
+        let Some(tray_ui) = self.tray_ui.get() else {
+            return;
+        };
+        if tray_ui.desktop_count.get() == 1 {
+            // Might have failed to get desktop count at startup, so try again
+            if vd::get_desktop_count().is_err() {
+                self.recheck_virtual_desktop_init
+                    .notify_after(Duration::from_millis(10));
+            } else {
+                tray_ui.update_desktop_info();
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -169,6 +192,11 @@ impl DynamicUiHooks<SystemTray> for TrayRoot {
                 self.rebuild_at_startup.notify_at(rebuild_at);
                 break;
             }
+        }
+
+        if tray_ui.desktop_count.get() == 1 {
+            self.recheck_virtual_desktop_init
+                .notify_after(Duration::from_millis(10));
         }
     }
 
@@ -524,28 +552,33 @@ impl SystemTray {
         );
         let dynamic_ui = DynamicUi::new(plugins);
         dynamic_ui.set_prevent_recursive_events(true);
-        Rc::new(Self {
+        let this = Rc::new(Self {
             desktop_count: Cell::new(vd::get_desktop_count().unwrap_or(1)),
-            desktop_index: Cell::new(
-                vd::get_current_desktop()
-                    .and_then(|d| d.get_index())
-                    .unwrap_or(1),
-            ),
-            desktop_names: RefCell::new(
-                vd::get_desktops()
-                    .and_then(|ds| {
-                        ds.into_iter()
-                            .map(|d| d.get_name().map(Rc::from).map(Some))
-                            .collect::<Result<Vec<_>, _>>()
-                    })
-                    .inspect_err(|e| {
-                        tracing::warn!("Failed to get desktop names: {e:?}");
-                    })
-                    .unwrap_or_default(),
-            ),
+            desktop_index: Cell::new(1),
+            desktop_names: RefCell::new(Vec::new()),
             has_light_taskbar: Cell::new(has_light_taskbar),
             dynamic_ui,
-        })
+        });
+        this.update_desktop_info();
+        this
+    }
+    fn update_desktop_info(&self) {
+        self.desktop_index.set(
+            vd::get_current_desktop()
+                .and_then(|d| d.get_index())
+                .unwrap_or(1),
+        );
+        let names = vd::get_desktops()
+            .and_then(|ds| {
+                ds.into_iter()
+                    .map(|d| d.get_name().map(Rc::from).map(Some))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .inspect_err(|e| {
+                tracing::warn!("Failed to get desktop names: {e:?}");
+            })
+            .unwrap_or_default();
+        self.desktop_names.replace(names);
     }
     /// # References
     ///

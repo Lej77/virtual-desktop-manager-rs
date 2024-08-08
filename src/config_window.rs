@@ -1378,6 +1378,21 @@ impl ConfigWindow {
                 nwg::CheckBoxState::Unchecked
             });
         }
+        fn set_text(text_box: &nwg::TextBox, new_text: &str) {
+            let new_text = new_text
+                .chars()
+                .flat_map(|c| {
+                    [
+                        Some('\r').filter(|_| c == '\n'),
+                        Some(c).filter(|&c| c != '\r'),
+                    ]
+                })
+                .flatten()
+                .collect::<String>();
+            if text_box.text() != new_text {
+                text_box.set_text(&new_text);
+            }
+        }
 
         // Window Index - Lower Bound:
         set_checked(
@@ -1452,14 +1467,10 @@ impl ConfigWindow {
             });
 
         // Window Title:
-        if *self.filter_title.text() != **filter.window_title.pattern() {
-            self.filter_title.set_text(filter.window_title.pattern());
-        }
+        set_text(&self.filter_title, filter.window_title.pattern());
 
         // Process Name:
-        if *self.filter_process.text() != **filter.process_name.pattern() {
-            self.filter_process.set_text(filter.process_name.pattern());
-        }
+        set_text(&self.filter_process, filter.process_name.pattern());
 
         // Action:
         {
@@ -1534,8 +1545,8 @@ impl ConfigWindow {
                     },
                 }
             },
-            window_title: TextPattern::new(Arc::from(self.filter_title.text())),
-            process_name: TextPattern::new(Arc::from(self.filter_process.text())),
+            window_title: TextPattern::new(Arc::from(self.filter_title.text().replace('\r', ""))),
+            process_name: TextPattern::new(Arc::from(self.filter_process.text().replace('\r', ""))),
             action: 'action: {
                 let Some(selected) = self.filter_action.selection() else {
                     break 'action FilterAction::default();
@@ -1947,10 +1958,15 @@ impl ConfigWindow {
             selection.start.min(text.len() as u32)..selection.end.min(text.len() as u32);
 
         // Previous cursor position might now be in the middle of a \r\n, so check for that:
-        let Some(selected_and_prev) =
-            text.as_bytes().get((selection.start as usize).saturating_sub(1)..(selection.end as usize))
+        let Some(selected_and_prev) = text
+            .as_bytes()
+            .get((selection.start as usize).saturating_sub(1)..(selection.end as usize))
         else {
-            tracing::warn!(?selection, text, "Selection was over invalid characters so can't update it");
+            tracing::warn!(
+                ?selection,
+                text,
+                "Selection was over invalid characters so can't update it"
+            );
             return;
         };
         tracing::debug!(
