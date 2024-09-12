@@ -632,6 +632,22 @@ pub fn switch_desktop(desktop: Desktop) -> Result<()> {
     Err(no_dynamic_library_error())
 }
 
+/// Wrapper around [`winvd::switch_desktop_with_animation`] (but prefers dynamic loaded
+/// library if it exists).
+pub fn switch_desktop_with_animation(desktop: Desktop) -> Result<()> {
+    #[cfg(feature = "winvd_static")]
+    {
+        winvd::switch_desktop_with_animation(winvd::Desktop::from(desktop))?;
+        return Ok(());
+    }
+    #[allow(unreachable_code)]
+    Err(Error::DynamicCall(
+        dynamic::DynamicError::GoToDesktopNumber {
+            desktop_number: desktop.get_index().unwrap_or(1) as i32,
+        },
+    ))
+}
+
 /// Wrapper around [`winvd::remove_desktop`] (but prefers dynamic loaded
 /// library if it exists).
 pub fn remove_desktop(desktop: Desktop, fallback_desktop: Desktop) -> Result<()> {

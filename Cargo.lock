@@ -1722,7 +1722,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "virtual-desktop-manager"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ab_glyph",
  "clap",
@@ -2110,7 +2110,7 @@ dependencies = [
 [[package]]
 name = "winvd"
 version = "0.0.47"
-source = "git+https://github.com/Lej77/VirtualDesktopAccessor.git?rev=de26f4379f6fef49e21fae0b60dd6cdbb5d38e41#de26f4379f6fef49e21fae0b60dd6cdbb5d38e41"
+source = "git+https://github.com/Lej77/VirtualDesktopAccessor.git?rev=8f9b2c3c950d564a368375b1dda08f8c51967cbd#8f9b2c3c950d564a368375b1dda08f8c51967cbd"
 dependencies = [
  "macro_rules_attribute",
  "windows",

@@ -111,7 +111,12 @@ impl TrayRoot {
         };
         if tray_ui.desktop_count.get() == 1 {
             // Might have failed to get desktop count at startup, so try again
-            if vd::get_desktop_count().is_err() {
+            if matches!(vd::get_desktop_count(), Err(_) | Ok(0 | 1))
+                // Don't recheck count if the program was started long ago:
+                && Instant::now()
+                    .saturating_duration_since(self.first_created_at.unwrap_or_else(Instant::now))
+                    > Duration::from_secs(120)
+            {
                 self.recheck_virtual_desktop_init
                     .notify_after(Duration::from_millis(10));
             } else {
@@ -428,14 +433,18 @@ impl TrayPlugin for TrayRoot {
         // Change icon first since any delay in that is more visible than if the
         // tooltip isn't updated immediately:
         self.update_tray_icon(tray_ui, new_ix);
+        const INDENT: &str = "           ";
         self.tray.set_tip(&format!(
             "Virtual Desktop Manager\
-            \n           [Desktop {}]{}",
+            \n{INDENT}[Desktop {}]{name_preview}",
             new_ix + 1,
-            if let Some(name) = tray_ui.get_desktop_name(new_ix) {
-                format!("\n  [{name}]")
+            name_preview = if let Some(name) = tray_ui
+                .get_desktop_name(new_ix)
+                .filter(|name| !name.trim().is_empty())
+            {
+                format!("\n{INDENT}[{name}]")
             } else {
-                "".to_string()
+                String::new()
             }
         ));
     }
@@ -551,7 +560,7 @@ impl SystemTray {
             "Detected Windows mode (affects taskbar color)"
         );
         let dynamic_ui = DynamicUi::new(plugins);
-        dynamic_ui.set_prevent_recursive_events(true);
+        dynamic_ui.set_prevent_recursive_events(false);
         let this = Rc::new(Self {
             desktop_count: Cell::new(vd::get_desktop_count().unwrap_or(1)),
             desktop_index: Cell::new(1),
@@ -800,7 +809,9 @@ impl SystemTray {
         let desktop = vd::get_desktop(desktop_ix);
         let res = 'result: {
             if smooth {
-                if let Some(plugin) = self.dynamic_ui.get_ui::<SmoothDesktopSwitcher>() {
+                if vd::switch_desktop_with_animation(desktop).is_ok() {
+                    tracing::debug!("Used COM interfaces to animate desktop switch");
+                } else if let Some(plugin) = self.dynamic_ui.get_ui::<SmoothDesktopSwitcher>() {
                     // Attempt to hide menu since its closing animation doesn't
                     // look nice when smoothly switching desktop:
                     self.hide_menu();

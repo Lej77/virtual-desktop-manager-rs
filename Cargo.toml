@@ -1,6 +1,6 @@
 [package]
 name = "virtual-desktop-manager"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
 license = "MIT"
 edition = "2021"
@@ -87,8 +87,10 @@ winvd_static = ["dep:winvd"]
 winvd_dynamic = ["dep:libloading"]
 
 [dependencies]
-# Waiting for Windows 10 support upstream: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
-winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", rev = "de26f4379f6fef49e21fae0b60dd6cdbb5d38e41", features = [
+# Using fork while waiting for support upstream:
+# - Windows 10 support: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
+# - Animated switching of current desktop
+winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", rev = "8f9b2c3c950d564a368375b1dda08f8c51967cbd", features = [
     "multiple-windows-versions",
 ], optional = true }
 libloading = { version = "0.8", optional = true }
