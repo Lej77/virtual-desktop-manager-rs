@@ -106,21 +106,29 @@ impl TrayRoot {
     }
 
     fn notify_check_desktop_count(&self) {
+        // TODO: move this code to tray_plugins::desktop_events
         let Some(tray_ui) = self.tray_ui.get() else {
             return;
         };
-        if tray_ui.desktop_count.get() == 1 {
+        if tray_ui.desktop_count.get() <= 1 {
             // Might have failed to get desktop count at startup, so try again
             if matches!(vd::get_desktop_count(), Err(_) | Ok(0 | 1))
-                // Don't recheck count if the program was started long ago:
-                && Instant::now()
-                    .saturating_duration_since(self.first_created_at.unwrap_or_else(Instant::now))
-                    > Duration::from_secs(120)
+                // Recheck count for about 2 minutes after startup in case
+                // virtual desktops haven't been initialized yet:
+                && self.first_created_at.map_or(
+                    false,
+                    |created_at| Instant::now()
+                        .saturating_duration_since(created_at)
+                        > Duration::from_secs(120)
+                    )
             {
                 self.recheck_virtual_desktop_init
-                    .notify_after(Duration::from_millis(10));
+                    .notify_after(Duration::from_millis(1000));
             } else {
                 tray_ui.update_desktop_info();
+                tray_ui.dynamic_ui.for_each_ui(|plugin| {
+                    plugin.on_desktop_count_changed(&tray_ui, tray_ui.desktop_count.get())
+                });
             }
         }
     }
@@ -691,6 +699,41 @@ impl SystemTray {
         );
         self.root().need_rebuild.set(true);
     }
+    fn update_desktop_count(self: &Rc<Self>) {
+        match vd::get_desktop_count() {
+            Ok(count) => {
+                self.desktop_count.set(count);
+                {
+                    let len = self.desktop_names.borrow().len() as u32;
+                    match len.cmp(&count) {
+                        std::cmp::Ordering::Less => {
+                            let range = len..count;
+                            let new_names: Vec<_> = range.map(
+                                |ix| match vd::get_desktop(ix).get_name() {
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "Failed to get virtual desktop name for desktop {}: {e:?}",
+                                            ix + 1
+                                        );
+                                        None
+                                    }
+                                    Ok(name) => Some(Rc::from(name)),
+                                },
+                            ).collect();
+                            self.desktop_names.borrow_mut().extend(new_names);
+                        }
+                        std::cmp::Ordering::Greater => {
+                            self.desktop_names.borrow_mut().truncate(count as usize)
+                        }
+                        std::cmp::Ordering::Equal => {}
+                    }
+                }
+                self.dynamic_ui
+                    .for_each_ui(|plugin| plugin.on_desktop_count_changed(self, count));
+            }
+            Err(e) => tracing::error!("Failed to get virtual desktop count: {e:?}"),
+        }
+    }
     pub fn notify_desktop_event(self: &Rc<Self>, event: vd::DesktopEvent) {
         // Note: this will run inside an OnNotice event handler, so dynamic_ui
         // will check for rebuilding afterwards.
@@ -700,39 +743,7 @@ impl SystemTray {
         tracing::trace!("Desktop event: {:?}", event);
 
         match &event {
-            DesktopCreated { .. } | DesktopDestroyed { .. } => match vd::get_desktop_count() {
-                Ok(count) => {
-                    self.desktop_count.set(count);
-                    {
-                        let len = self.desktop_names.borrow().len() as u32;
-                        match len.cmp(&count) {
-                            std::cmp::Ordering::Less => {
-                                let range = len..count;
-                                let new_names: Vec<_> = range.map(
-                                    |ix| match vd::get_desktop(ix).get_name() {
-                                        Err(e) => {
-                                            tracing::warn!(
-                                                "Failed to get virtual desktop name for desktop {}: {e:?}",
-                                                ix + 1
-                                            );
-                                            None
-                                        }
-                                        Ok(name) => Some(Rc::from(name)),
-                                    },
-                                ).collect();
-                                self.desktop_names.borrow_mut().extend(new_names);
-                            }
-                            std::cmp::Ordering::Greater => {
-                                self.desktop_names.borrow_mut().truncate(count as usize)
-                            }
-                            std::cmp::Ordering::Equal => {}
-                        }
-                    }
-                    self.dynamic_ui
-                        .for_each_ui(|plugin| plugin.on_desktop_count_changed(self, count));
-                }
-                Err(e) => tracing::error!("Failed to get virtual desktop count: {e:?}"),
-            },
+            DesktopCreated { .. } | DesktopDestroyed { .. } => self.update_desktop_count(),
             DesktopNameChanged(d, new_name) => match d.get_index() {
                 Err(e) => {
                     tracing::warn!("Failed to get virtual desktop index after name change: {e:?}");
@@ -746,6 +757,15 @@ impl SystemTray {
             },
             DesktopChanged { new, .. } => {
                 if let Ok(new_ix) = new.get_index() {
+                    if new_ix >= self.desktop_count.get() {
+                        tracing::warn!(
+                            new_index = new_ix,
+                            count = self.desktop_count.get(),
+                            "Switched to desktop index larger than desktop count, \
+                            must have failed initial load or missed change event"
+                        );
+                        self.update_desktop_count();
+                    }
                     self.desktop_index.set(new_ix);
                     self.dynamic_ui
                         .for_each_ui(|plugin| plugin.on_current_desktop_changed(self, new_ix));
@@ -811,6 +831,13 @@ impl SystemTray {
             if smooth {
                 if vd::switch_desktop_with_animation(desktop).is_ok() {
                     tracing::debug!("Used COM interfaces to animate desktop switch");
+
+                    if let Some(plugin) = self.dynamic_ui.get_ui::<SmoothDesktopSwitcher>() {
+                        // Switching desktop with animation doesn't seem to
+                        // refocus the most recently used window like it does
+                        // when animations aren't used, so we do it manually:
+                        plugin.refocus_last_window();
+                    }
                 } else if let Some(plugin) = self.dynamic_ui.get_ui::<SmoothDesktopSwitcher>() {
                     // Attempt to hide menu since its closing animation doesn't
                     // look nice when smoothly switching desktop:
