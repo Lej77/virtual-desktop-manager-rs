@@ -1,6 +1,6 @@
 [package]
 name = "virtual-desktop-manager"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
 license = "MIT"
 edition = "2021"
@@ -144,7 +144,7 @@ runas = { version = "1.0.0", optional = true }
 #
 # Also adds icon to our exe:
 # https://stackoverflow.com/questions/75038925/how-to-link-an-icon-to-a-rust-windows-application
-embed-resource = "2.4.2"
+winres = "0.1.12"
 
 
 # Minimize binary size (went from about 1180 kb to 950 kb), see

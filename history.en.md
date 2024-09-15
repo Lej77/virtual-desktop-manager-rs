@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.4 (2024-09-15)
+  - Feature: include version metadata in executable.
 - 0.1.3 (2024-09-15)
   - Fix: more robust loading of initial desktop count.
   - Fix: refocus last window when switching using animations.

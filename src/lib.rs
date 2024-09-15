@@ -46,7 +46,7 @@ fn exe_icon() -> Option<std::rc::Rc<nwg::Icon>> {
             .get_or_init(|| {
                 nwg::EmbedResource::load(None)
                     .unwrap()
-                    .icon(2, None)
+                    .icon(1, None)
                     .map(Rc::new)
             })
             .as_ref()

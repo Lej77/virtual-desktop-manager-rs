@@ -33,7 +33,7 @@ pub struct TrayRoot {
     pub window: TrayWindow,
 
     /// The initial icon for the tray.
-    #[nwg_resource(source_embed: Some(&nwg::EmbedResource::load(None).unwrap()), source_embed_id: 2)]
+    #[nwg_resource(source_embed: Some(&nwg::EmbedResource::load(None).unwrap()), source_embed_id: 1)]
     //#[nwg_resource(source_bin: Some(crate::tray_icons::ICON_EMPTY))]
     pub icon: nwg::Icon,
 
