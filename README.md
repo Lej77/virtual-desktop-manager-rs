@@ -91,6 +91,6 @@ Not all of the original features are implemented in the Rust rewrite:
 
 - The Rust program doesn't determine if a window is the "main" window of a process. This wasn't very useful so this feature was never implemented.
 
-- The Rust program seems to sometimes fail to smoothly switch current desktop (that is to switch desktop using an animation) while the C# program seems to be less affected by this issue.
+- The Rust program seems to sometimes fail to smoothly switch current desktop on Windows 10 (that is to switch desktop using an animation) while the C# program seems to be less affected by this issue.
 
 [`VirtualDesktopAccessor.dll`]: https://github.com/Ciantic/VirtualDesktopAccessor/releases/
