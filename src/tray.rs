@@ -675,12 +675,24 @@ impl SystemTray {
 /// Events.
 impl SystemTray {
     pub fn notify_quick_switch_hotkey(self: &Rc<Self>) {
-        if let Some(plugin) = self
+        if let Some(quick_switch_top_menu) = self
             .get_dynamic_ui()
-            .get_ui::<crate::tray_plugins::menus::OpenSubmenuPlugin>()
+            .get_ui::<crate::tray_plugins::menus::QuickSwitchTopMenu>()
+            .and_then(|plugin| plugin.menu_handle())
         {
-            plugin.queue_open_of([crate::tray_plugins::menus::SubMenu::AccessKey(b'Q')]);
-        };
+            if let Some(open_submenu) = self
+                .get_dynamic_ui()
+                .get_ui::<crate::tray_plugins::menus::OpenSubmenuPlugin>()
+            {
+                open_submenu.queue_open_of([crate::tray_plugins::menus::SubMenu::Handle(
+                    quick_switch_top_menu,
+                )]);
+            } else {
+                tracing::warn!("Can't queue opening of submenu");
+            }
+        } else {
+            tracing::trace!("No top menu for quick switch menu");
+        }
 
         self.show_menu(MenuPosition::AtTrayIcon);
     }

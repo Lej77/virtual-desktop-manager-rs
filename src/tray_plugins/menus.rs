@@ -9,10 +9,11 @@ use crate::{
 };
 use std::{
     any::TypeId,
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, VecDeque},
     rc::Rc,
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -20,6 +21,10 @@ pub enum SubMenu {
     /// Handle for the [`nwg::Menu`] that represents a submenu.
     Handle(nwg::ControlHandle),
     /// ASCII character that will select the sub menu.
+    ///
+    /// Note that this won't work if the user is holding the control key when we
+    /// attempt to open the submenu.
+    #[allow(dead_code)]
     AccessKey(u8),
 }
 impl SubMenu {
@@ -84,11 +89,19 @@ impl SubMenu {
 #[derive(Default, nwd::NwgPartial)]
 pub struct OpenSubmenuPlugin {
     submenus: RefCell<VecDeque<SubMenu>>,
+    queued_at: Cell<Option<Instant>>,
 }
 impl OpenSubmenuPlugin {
+    /// Ignore queued operations if the context menu isn't opened after this
+    /// much time.
+    const MAX_DELAY: Duration = Duration::from_millis(4000);
+
     pub fn queue_open_of(&self, submenu: impl IntoIterator<Item = SubMenu>) {
         let items = submenu.into_iter().collect::<Vec<_>>();
-        self.submenus.borrow_mut().extend(items);
+        let mut guard = self.submenus.borrow_mut();
+        guard.clear();
+        guard.extend(items);
+        self.queued_at.set(Some(Instant::now()));
     }
 }
 impl DynamicUiHooks<SystemTray> for OpenSubmenuPlugin {
@@ -108,7 +121,18 @@ impl DynamicUiHooks<SystemTray> for OpenSubmenuPlugin {
         _window: nwg::ControlHandle,
     ) {
         if let nwg::Event::OnMenuOpen = evt {
+            let Some(queue_time) = self.queued_at.get() else {
+                // Nothing queued.
+                return;
+            };
+            if queue_time.elapsed() > Self::MAX_DELAY {
+                // Action was queued long ago and no longer seems relevant.
+                self.submenus.borrow_mut().clear();
+                self.queued_at.set(None);
+                return;
+            }
             let Some(next) = self.submenus.borrow_mut().pop_front() else {
+                self.queued_at.set(None);
                 return;
             };
             next.open();
@@ -128,6 +152,12 @@ pub struct QuickSwitchTopMenu {
     tray_sep: nwg::MenuSeparator,
 
     is_built: bool,
+}
+impl QuickSwitchTopMenu {
+    /// Handle to the root quick switch submenu if it is enabled and built.
+    pub fn menu_handle(&self) -> Option<nwg::ControlHandle> {
+        Some(self.tray_quick_menu.handle).filter(|_| self.is_built)
+    }
 }
 impl DynamicUiHooks<SystemTray> for QuickSwitchTopMenu {
     fn before_partial_build(

@@ -1,6 +1,6 @@
 [package]
 name = "virtual-desktop-manager"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
 license = "MIT"
 edition = "2021"

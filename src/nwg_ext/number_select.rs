@@ -18,8 +18,12 @@ mod high_dpi {
         use windows::Win32::UI::WindowsAndMessaging::USER_DEFAULT_SCREEN_DPI;
 
         let dpi = dpi();
-        let x = x.mul_div_round(dpi, USER_DEFAULT_SCREEN_DPI as i32).unwrap_or(x);
-        let y = y.mul_div_round(dpi, USER_DEFAULT_SCREEN_DPI as i32).unwrap_or(y);
+        let x = x
+            .mul_div_round(dpi, USER_DEFAULT_SCREEN_DPI as i32)
+            .unwrap_or(x);
+        let y = y
+            .mul_div_round(dpi, USER_DEFAULT_SCREEN_DPI as i32)
+            .unwrap_or(y);
         (x, y)
     }
 
@@ -34,8 +38,12 @@ mod high_dpi {
         use windows::Win32::UI::WindowsAndMessaging::USER_DEFAULT_SCREEN_DPI;
 
         let dpi = dpi();
-        let x = x.mul_div_round(USER_DEFAULT_SCREEN_DPI as i32, dpi).unwrap_or(x);
-        let y = y.mul_div_round(USER_DEFAULT_SCREEN_DPI as i32, dpi).unwrap_or(y);
+        let x = x
+            .mul_div_round(USER_DEFAULT_SCREEN_DPI as i32, dpi)
+            .unwrap_or(x);
+        let y = y
+            .mul_div_round(USER_DEFAULT_SCREEN_DPI as i32, dpi)
+            .unwrap_or(y);
         (x, y)
     }
 }
@@ -895,12 +903,16 @@ macro_rules! handles {
     ($control:ty) => {
         #[allow(deprecated)]
         impl From<&$control> for ControlHandle {
-            fn from(control: &$control) -> Self { control.handle }
+            fn from(control: &$control) -> Self {
+                control.handle
+            }
         }
 
         #[allow(deprecated)]
         impl From<&mut $control> for ControlHandle {
-            fn from(control: &mut $control) -> Self { control.handle }
+            fn from(control: &mut $control) -> Self {
+                control.handle
+            }
         }
 
         #[allow(deprecated)]

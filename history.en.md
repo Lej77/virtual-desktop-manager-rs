@@ -1,8 +1,11 @@
 # History
 
 - master/HEAD
+- 0.1.6 (2024-09-25)
+  - Fix: hotkey correctly opens quick switch submenu when ctrl key is held.
+  - Fix: don't queue reopening of submenus for a long time.
 - 0.1.5 (2024-09-24)
-  - Feature: support global hotkey for opening quick switch context menu
+  - Feature: support global hotkey for opening quick switch context menu.
   - Feature: options for left click and middle click of tray icon.
   - Feature: re-open settings submenu when changing some settings.
   - Feature: backspace as alias for escape key in context menu.
