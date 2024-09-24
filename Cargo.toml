@@ -1,6 +1,6 @@
 [package]
 name = "virtual-desktop-manager"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
 license = "MIT"
 edition = "2021"
@@ -27,6 +27,7 @@ default = [
     "serde_path_to_error",
     "admin_startup",
     "auto_start",
+    "global_hotkey",
 ]
 
 # A tray icon with only a digit and no background
@@ -86,6 +87,9 @@ winvd_static = ["dep:winvd"]
 # (this allows the binary to support newer Windows versions without being recompiled) (+25 KB binary size)
 winvd_dynamic = ["dep:libloading"]
 
+# Global keyboard shortcuts
+global_hotkey = ["dep:global-hotkey"]
+
 [dependencies]
 # Using fork while waiting for support upstream:
 # - Windows 10 support: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
@@ -136,6 +140,9 @@ clap = { version = "4.5.4", features = [
 deelevate = { version = "0.2.0", optional = true } # More control over starting program as admin than `runas`
 # Start a subtask as admin (used to register elevated auto start):
 runas = { version = "1.0.0", optional = true }
+
+# Global keyboard shortcuts:
+global-hotkey = { version = "0.6.2", optional = true }
 
 [build-dependencies]
 # Fixes incompatibility between the `native-windows-gui` and `windows` crates:

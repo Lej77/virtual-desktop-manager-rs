@@ -278,6 +278,42 @@ pub fn menu_remove(menu: &nwg::Menu) {
     let _ = unsafe { RemoveMenu(HMENU(parent as isize), index, MF_BYPOSITION) };
 }
 
+/// Finds the current context menu window using an undocumented trick.
+///
+/// Note that you can send the undocumented message `0x1e5` to the window in
+/// order to select an item, specify the item index as the `wparam`. (Leave
+/// `lparam` as 0.) Then you can activate that item (to for example open a
+/// submenu) by sending a [`WM_KEYDOWN`] message with the [`VK_RETURN`] key.
+///
+/// [`WM_KEYDOWN`]: windows::Win32::UI::WindowsAndMessaging::WM_KEYDOWN
+/// [`VK_RETURN`]: windows::Win32::UI::Input::KeyboardAndMouse::VK_RETURN
+///
+/// # References
+///
+/// - <https://microsoft.public.win32.programmer.ui.narkive.com/jQJBmxzp/open-submenu-programmatically#post6>
+///    - Which links to:
+///      <http://www.codeproject.com/menu/skinmenu.asp?df=100&forumid=14636&exp=0&select=2219867>
+pub fn find_context_menu_window() -> Option<HWND> {
+    use windows::{
+        core::PCWSTR,
+        Win32::{Foundation::HWND, UI::WindowsAndMessaging::FindWindowW},
+    };
+
+    static CONTEXT_MENU_CLASS_NAME: OnceLock<Vec<u16>> = OnceLock::new();
+    let class_name = CONTEXT_MENU_CLASS_NAME.get_or_init(|| {
+        let mut t = to_utf16("#32768");
+        t.shrink_to_fit();
+        t
+    });
+
+    let window = unsafe { FindWindowW(PCWSTR::from_raw(class_name.as_ptr()), None) };
+    if window == HWND::default() {
+        None
+    } else {
+        Some(window)
+    }
+}
+
 /// Check if a window is valid (not destroyed). A closed window might still be
 /// valid.
 ///

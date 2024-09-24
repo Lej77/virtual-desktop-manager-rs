@@ -1,6 +1,11 @@
 # History
 
 - master/HEAD
+- 0.1.5 (2024-09-24)
+  - Feature: support global hotkey for opening quick switch context menu
+  - Feature: options for left click and middle click of tray icon.
+  - Feature: re-open settings submenu when changing some settings.
+  - Feature: backspace as alias for escape key in context menu.
 - 0.1.4 (2024-09-15)
   - Feature: include version metadata in executable.
 - 0.1.3 (2024-09-15)

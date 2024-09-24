@@ -10,6 +10,7 @@ extern crate native_windows_gui as nwg;
 
 #[cfg(feature = "auto_start")]
 mod auto_start;
+pub mod block_on;
 #[cfg(feature = "admin_startup")]
 mod change_elevation;
 mod config_window;
@@ -23,13 +24,13 @@ mod tray_icons;
 pub mod vd;
 mod window_filter;
 pub mod window_info;
-pub mod block_on;
 #[cfg(all(feature = "logging", debug_assertions))]
 mod wm_msg_to_string;
 mod tray_plugins {
     pub mod apply_filters;
     pub mod desktop_events;
     pub mod desktop_events_dynamic;
+    pub mod hotkeys;
     pub mod menus;
     pub mod panic_notifier;
 }
@@ -291,11 +292,15 @@ pub fn run_gui() {
         Box::<tray_plugins::panic_notifier::PanicNotifier>::default(),
         Box::<tray_plugins::apply_filters::ApplyFilters>::default(),
         settings_plugin,
+        #[cfg(feature = "global_hotkey")]
+        Box::<tray_plugins::hotkeys::HotKeyPlugin>::default(),
         #[cfg(feature = "auto_start")]
         Box::<auto_start::AutoStartPlugin>::default(),
         desktop_event_plugin(),
         Box::<invisible_window::SmoothDesktopSwitcher>::default(),
+        Box::<tray_plugins::menus::OpenSubmenuPlugin>::default(),
         Box::<tray_plugins::menus::TopMenuItems>::default(),
+        Box::<tray_plugins::menus::BackspaceAsEscapeAlias>::default(),
         Box::<tray_plugins::menus::QuickSwitchTopMenu>::default(),
         Box::<tray_plugins::menus::QuickSwitchMenuUiAdapter>::default(),
         Box::<tray_plugins::menus::FlatSwitchMenu>::default(),

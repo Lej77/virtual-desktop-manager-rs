@@ -18,7 +18,7 @@ use crate::{
         menu_index_in_parent, menu_item_index_in_parent, tray_get_rect, tray_set_version_4,
         windows_msg_for_explorer_restart, FastTimerControl, TrayWindow,
     },
-    settings::UiSettings,
+    settings::{TrayClickAction, UiSettings},
     vd,
 };
 
@@ -302,7 +302,7 @@ impl DynamicUiHooks<SystemTray> for TrayRoot {
                         ?effect,
                         "Choose manual effect in response to keyboard button press"
                     );
-                    match effect {
+                    let (should_execute, item_index) = match effect {
                         MenuKeyPressEffect::Ignore => return Some(0),
                         MenuKeyPressEffect::Close => {
                             // 1 in high-order word (above the first 16 bit):
@@ -328,27 +328,23 @@ impl DynamicUiHooks<SystemTray> for TrayRoot {
                                 );
                                 return Some(0);
                             };
-                            let item_index = item_index as isize;
-                            if item_index >= (1 << 16) {
-                                tracing::error!(?item_index, "Menu item index is too large");
-                                return Some(0);
-                            }
-                            if should_execute {
-                                tracing::debug!(
-                                    ?effect,
-                                    "Executing menu item at index {item_index}"
-                                );
-                                // 2 in high-order word (above the first 16 bit):
-                                return Some(2 << 16 | item_index);
-                            } else {
-                                tracing::debug!(
-                                    ?effect,
-                                    "Selecting menu item at index {item_index}"
-                                );
-                                // 3 in high-order word (above the first 16 bit):
-                                return Some(3 << 16 | item_index);
-                            }
+                            (should_execute, item_index as isize)
                         }
+                        MenuKeyPressEffect::SelectIndex(index) => (false, index as isize),
+                    };
+
+                    if item_index >= (1 << 16) {
+                        tracing::error!(?item_index, "Menu item index is too large");
+                        return Some(0);
+                    }
+                    if should_execute {
+                        tracing::debug!(?effect, "Executing menu item at index {item_index}");
+                        // 2 in high-order word (above the first 16 bit):
+                        return Some(2 << 16 | item_index);
+                    } else {
+                        tracing::debug!(?effect, "Selecting menu item at index {item_index}");
+                        // 3 in high-order word (above the first 16 bit):
+                        return Some(3 << 16 | item_index);
                     }
                 }
             } else if msg == WM_THEMECHANGED || msg == WM_WININICHANGE {
@@ -486,6 +482,8 @@ pub enum MenuKeyPressEffect {
     Execute(nwg::ControlHandle),
     /// Select the provided menu item.
     Select(nwg::ControlHandle),
+    /// Select the menu item at the specified index of the current menu/submenu.
+    SelectIndex(usize),
 }
 
 /// A trait for Native GUI plugins for the system tray.
@@ -574,6 +572,7 @@ impl SystemTray {
             desktop_index: Cell::new(1),
             desktop_names: RefCell::new(Vec::new()),
             has_light_taskbar: Cell::new(has_light_taskbar),
+
             dynamic_ui,
         });
         this.update_desktop_info();
@@ -675,6 +674,16 @@ impl SystemTray {
 }
 /// Events.
 impl SystemTray {
+    pub fn notify_quick_switch_hotkey(self: &Rc<Self>) {
+        if let Some(plugin) = self
+            .get_dynamic_ui()
+            .get_ui::<crate::tray_plugins::menus::OpenSubmenuPlugin>()
+        {
+            plugin.queue_open_of([crate::tray_plugins::menus::SubMenu::AccessKey(b'Q')]);
+        };
+
+        self.show_menu(MenuPosition::AtTrayIcon);
+    }
     pub fn notify_settings_changed(self: &Rc<Self>, prev: &Arc<UiSettings>, new: &Arc<UiSettings>) {
         self.dynamic_ui
             .for_each_ui(|plugin| plugin.on_settings_changed(self, prev, new));
@@ -779,11 +788,45 @@ impl SystemTray {
     }
     fn notify_tray_left_click(&self) {
         self.root().notify_that_tray_icon_exists();
-        self.configure_filters(false);
+
+        let action = self.settings().get().left_click;
+        tracing::debug!(?action, "Left clicked tray icon");
+        match action {
+            TrayClickAction::Disabled => {}
+            TrayClickAction::StopFlashingWindows => {
+                self.stop_flashing_windows();
+            }
+            TrayClickAction::ToggleConfigurationWindow => {
+                self.configure_filters(false);
+            }
+            TrayClickAction::ApplyFilters => {
+                self.apply_filters();
+            }
+            TrayClickAction::OpenContextMenu => {
+                self.show_menu(MenuPosition::AtMouseCursor);
+            }
+        }
     }
     fn notify_tray_middle_click(&self) {
         self.root().notify_that_tray_icon_exists();
-        self.apply_filters();
+
+        let action = self.settings().get().middle_click;
+        tracing::debug!(?action, "Left clicked tray icon");
+        match action {
+            TrayClickAction::Disabled => {}
+            TrayClickAction::StopFlashingWindows => {
+                self.stop_flashing_windows();
+            }
+            TrayClickAction::ToggleConfigurationWindow => {
+                self.configure_filters(false);
+            }
+            TrayClickAction::ApplyFilters => {
+                self.apply_filters();
+            }
+            TrayClickAction::OpenContextMenu => {
+                self.show_menu(MenuPosition::AtMouseCursor);
+            }
+        }
     }
     fn notify_tray_menu_closed(&self) {
         // Attempt to give focus back to the most recent window:
@@ -940,6 +983,19 @@ impl SystemTray {
             } else {
                 config_window.window.close();
             }
+        }
+    }
+    pub fn stop_flashing_windows(&self) {
+        let guard = self
+            .get_dynamic_ui()
+            .get_ui::<crate::tray_plugins::apply_filters::ApplyFilters>();
+        if let Some(background) = guard {
+            background.stop_all_flashing_windows();
+        } else {
+            self.show_notification(
+                "Virtual Desktop Manager Warning",
+                "Stopping flashing windows is not supported",
+            );
         }
     }
 

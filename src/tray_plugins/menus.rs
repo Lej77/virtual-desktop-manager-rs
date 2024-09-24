@@ -7,8 +7,118 @@ use crate::{
     tray::{MenuKeyPressEffect, MenuPosition, SystemTray, SystemTrayRef, TrayPlugin, TrayRoot},
     vd,
 };
-use std::{any::TypeId, collections::BTreeMap, rc::Rc, sync::Arc};
+use std::{
+    any::TypeId,
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+    rc::Rc,
+    sync::Arc,
+};
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SubMenu {
+    /// Handle for the [`nwg::Menu`] that represents a submenu.
+    Handle(nwg::ControlHandle),
+    /// ASCII character that will select the sub menu.
+    AccessKey(u8),
+}
+impl SubMenu {
+    fn open(self) {
+        let Some(context_menu) = crate::nwg_ext::find_context_menu_window() else {
+            tracing::warn!(wanted_sub_menu =? self, "Failed to find context menu window");
+            return;
+        };
+
+        match self {
+            SubMenu::Handle(control_handle) => {
+                let Some(index) = crate::nwg_ext::menu_index_in_parent(control_handle) else {
+                    tracing::warn!("Failed to find settings submenu");
+                    return;
+                };
+
+                use windows::Win32::{
+                    Foundation::{LPARAM, WPARAM},
+                    UI::{
+                        Input::KeyboardAndMouse::VK_RETURN,
+                        WindowsAndMessaging::{PostMessageW, WM_KEYDOWN},
+                    },
+                };
+
+                unsafe {
+                    // Select submenu item:
+                    _ = PostMessageW(
+                        context_menu,
+                        0x1e5,
+                        WPARAM(usize::try_from(index).unwrap()),
+                        LPARAM(0),
+                    );
+                    // Activate it:
+                    _ = PostMessageW(
+                        context_menu,
+                        WM_KEYDOWN,
+                        WPARAM(usize::from(VK_RETURN.0)),
+                        LPARAM(0),
+                    );
+                }
+            }
+            SubMenu::AccessKey(key) => {
+                use windows::Win32::{
+                    Foundation::{LPARAM, WPARAM},
+                    UI::WindowsAndMessaging::{PostMessageW, WM_KEYDOWN},
+                };
+                unsafe {
+                    _ = PostMessageW(
+                        context_menu,
+                        WM_KEYDOWN,
+                        WPARAM(usize::from(key)),
+                        LPARAM(0),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Listens for context menu events to be able to then focus on submenu items
+/// and expand them.
+#[derive(Default, nwd::NwgPartial)]
+pub struct OpenSubmenuPlugin {
+    submenus: RefCell<VecDeque<SubMenu>>,
+}
+impl OpenSubmenuPlugin {
+    pub fn queue_open_of(&self, submenu: impl IntoIterator<Item = SubMenu>) {
+        let items = submenu.into_iter().collect::<Vec<_>>();
+        self.submenus.borrow_mut().extend(items);
+    }
+}
+impl DynamicUiHooks<SystemTray> for OpenSubmenuPlugin {
+    fn before_partial_build(
+        &mut self,
+        tray_ui: &Rc<SystemTray>,
+        _should_build: &mut bool,
+    ) -> Option<(nwg::ControlHandle, TypeId)> {
+        Some((tray_ui.root().tray_menu.handle, TypeId::of::<TrayRoot>()))
+    }
+    fn after_process_events(
+        &self,
+        _dynamic_ui: &Rc<SystemTray>,
+        evt: nwg::Event,
+        _evt_data: &nwg::EventData,
+        _handle: nwg::ControlHandle,
+        _window: nwg::ControlHandle,
+    ) {
+        if let nwg::Event::OnMenuOpen = evt {
+            let Some(next) = self.submenus.borrow_mut().pop_front() else {
+                return;
+            };
+            next.open();
+        }
+    }
+}
+impl TrayPlugin for OpenSubmenuPlugin {}
+
+/// A submenu item (with an extra separator) that can be used as the parent of
+/// the quick switch menu items.
 #[derive(Default, nwd::NwgPartial)]
 pub struct QuickSwitchTopMenu {
     #[nwg_control(text: "&Quick Switch")]
@@ -336,6 +446,9 @@ impl TopMenuItems {
             ..prev.clone()
         });
         self.update_label_for_request_admin_at_startup();
+        if let Some(plugin) = tray_ui.get_dynamic_ui().get_ui::<OpenSubmenuPlugin>() {
+            plugin.queue_open_of([SubMenu::Handle(self.tray_settings_menu.handle)]);
+        };
         tray_ui.show_menu(MenuPosition::AtPrevious);
     }
 }
@@ -512,6 +625,57 @@ impl DynamicUiHooks<SystemTray> for FlatSwitchMenu {
 impl TrayPlugin for FlatSwitchMenu {
     fn on_current_desktop_changed(&self, _tray_ui: &Rc<SystemTray>, current_desktop_index: u32) {
         self.check_current_desktop(current_desktop_index);
+    }
+}
+
+/// Listens for backspace key presses and sends escape key events when they
+/// occur. This allows backspace to be used to close submenus which works quite
+/// intuitively with the quick switch menu.
+#[derive(Default, nwd::NwgPartial)]
+pub struct BackspaceAsEscapeAlias {}
+impl DynamicUiHooks<SystemTray> for BackspaceAsEscapeAlias {
+    fn before_partial_build(
+        &mut self,
+        _dynamic_ui: &Rc<SystemTray>,
+        _should_build: &mut bool,
+    ) -> Option<(nwg::ControlHandle, TypeId)> {
+        None
+    }
+}
+impl TrayPlugin for BackspaceAsEscapeAlias {
+    fn on_menu_key_press(
+        &self,
+        _tray_ui: &Rc<SystemTray>,
+        key_code: u32,
+        _menu_handle: isize,
+    ) -> Option<MenuKeyPressEffect> {
+        if key_code != 8 {
+            // Not backspace key
+            return None;
+        }
+        'simulate_escape: {
+            use windows::Win32::{
+                Foundation::{LPARAM, WPARAM},
+                UI::{
+                    Input::KeyboardAndMouse::VK_ESCAPE,
+                    WindowsAndMessaging::{SendMessageW, WM_KEYDOWN},
+                },
+            };
+
+            let Some(context_menu_window) = crate::nwg_ext::find_context_menu_window() else {
+                tracing::warn!("Unable to find context menu window");
+                break 'simulate_escape;
+            };
+            unsafe {
+                SendMessageW(
+                    context_menu_window,
+                    WM_KEYDOWN,
+                    WPARAM(usize::from(VK_ESCAPE.0)),
+                    LPARAM(0),
+                );
+            }
+        }
+        Some(MenuKeyPressEffect::SelectIndex(0))
     }
 }
 
@@ -701,31 +865,13 @@ pub struct BottomMenuItems {
 }
 /// Handle menu clicks.
 impl BottomMenuItems {
-    forward_to_dynamic_ui!(tray_ui => apply_filters, exit);
+    forward_to_dynamic_ui!(tray_ui => apply_filters, stop_flashing_windows, exit);
 
     fn open_filter_config(&self) {
         let Some(tray_ui) = self.tray_ui.get() else {
             return;
         };
         tray_ui.configure_filters(true);
-    }
-
-    fn stop_flashing_windows(&self) {
-        let Some(tray_ui) = self.tray_ui.get() else {
-            return;
-        };
-
-        let guard = tray_ui
-            .get_dynamic_ui()
-            .get_ui::<crate::tray_plugins::apply_filters::ApplyFilters>();
-        if let Some(background) = guard {
-            background.stop_all_flashing_windows();
-        } else {
-            tray_ui.show_notification(
-                "Virtual Desktop Manager Warning",
-                "Stopping flashing windows is not supported",
-            );
-        }
     }
 }
 impl DynamicUiHooks<SystemTray> for BottomMenuItems {

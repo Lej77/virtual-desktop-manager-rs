@@ -180,6 +180,40 @@ impl fmt::Display for TrayIconType {
     }
 }
 
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+#[cfg_attr(feature = "persist_settings", derive(Serialize, Deserialize))]
+#[allow(dead_code)]
+pub enum TrayClickAction {
+    #[default]
+    Disabled,
+    StopFlashingWindows,
+    ToggleConfigurationWindow,
+    ApplyFilters,
+    OpenContextMenu,
+}
+impl TrayClickAction {
+    pub const ALL: &'static [Self] = &[
+        Self::Disabled,
+        Self::StopFlashingWindows,
+        Self::ToggleConfigurationWindow,
+        Self::ApplyFilters,
+        Self::OpenContextMenu,
+    ];
+}
+/// Used to display options in config window.
+impl fmt::Display for TrayClickAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match *self {
+            Self::Disabled => "Disabled",
+            Self::StopFlashingWindows => "Stop Flashing Windows",
+            Self::ToggleConfigurationWindow => "Open/Close Config Window",
+            Self::ApplyFilters => "Apply Filters",
+            Self::OpenContextMenu => "Open Context Menu",
+        };
+        f.write_str(text)
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 #[cfg_attr(feature = "persist_settings", derive(Serialize, Deserialize))]
 pub struct ConfigWindowInfo {
@@ -233,6 +267,16 @@ default_deserialize!(
         /// submenus of the quick switch menu. Usually it is enough to only have
         /// them in the top most "quick switch" context menu.
         pub quick_switch_menu_shortcuts_only_in_root: bool,
+
+        /// Global keyboard shortcut for opening the quick switch menu. Will be
+        /// parsed as a [`global_hotkey::hotkey::HotKey`].
+        pub quick_switch_hotkey: Arc<str>,
+
+        pub left_click: TrayClickAction,
+        /// Middle clicks are registered as left clicks for at least some
+        /// versions of Windows 11.
+        pub middle_click: TrayClickAction,
+
         /// Info about last location of the configuration window.
         pub config_window: ConfigWindowInfo,
         /// Filters/rules that specify which windows should be moved and to what
@@ -274,6 +318,11 @@ impl Default for UiSettings {
                 (",".to_owned(), 0),
             ])),
             quick_switch_menu_shortcuts_only_in_root: false,
+            quick_switch_hotkey: Arc::from(""),
+
+            left_click: TrayClickAction::ToggleConfigurationWindow,
+            middle_click: TrayClickAction::ApplyFilters,
+
             config_window: ConfigWindowInfo::default(),
             filters: Arc::new([]),
         }

@@ -6,6 +6,7 @@ use std::{
     io::Write,
     path::PathBuf,
     rc::Rc,
+    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering as AtomicOrdering},
         mpsc, Arc,
@@ -19,7 +20,9 @@ use crate::{
         list_view_set_group_info, list_view_sort_rows, window_is_valid, window_placement,
         ListViewGroupAlignment, ListViewGroupInfo, NumberSelect2, WindowPlacement,
     },
-    settings::{AutoStart, ConfigWindowInfo, QuickSwitchMenu, TrayIconType, UiSettings},
+    settings::{
+        AutoStart, ConfigWindowInfo, QuickSwitchMenu, TrayClickAction, TrayIconType, UiSettings,
+    },
     tray::{SystemTray, SystemTrayRef, TrayPlugin},
     vd,
     window_filter::{ExportedWindowFilters, FilterAction, IntegerRange, TextPattern, WindowFilter},
@@ -349,6 +352,54 @@ pub struct ConfigWindow {
     #[nwg_events(OnButtonClick: [Self::on_settings_ui_changed])]
     settings_quick_menu_shortcuts_in_submenus: nwg::CheckBox,
 
+    #[nwg_control(
+        parent: settings_tab, position: (5, 430), size: (240, 25),
+        text: "Global hotkey for quick switch:",
+        background_color: TAB_BACKGROUND,
+    )]
+    settings_quick_menu_hotkey_label: nwg::Label,
+
+    #[nwg_control(parent: settings_tab, position: (5, 455), size: (240, 28))]
+    #[nwg_events(OnTextInput: [Self::on_settings_ui_changed])]
+    settings_quick_menu_hotkey: nwg::TextInput,
+
+    #[nwg_control(parent: settings_tab,
+        position: (5, 490), size: (240, 46),
+        readonly: true,
+        flags: "HSCROLL | AUTOHSCROLL | TAB_STOP | VISIBLE",
+    )]
+    settings_quick_menu_hotkey_error: nwg::TextBox,
+
+    #[nwg_control(
+        parent: settings_tab, position: (5, 550), size: (240, 25),
+        text: "Left click on tray icon:",
+        background_color: TAB_BACKGROUND,
+    )]
+    settings_left_click_label: nwg::Label,
+
+    #[nwg_control(
+        parent: settings_tab, position: (5, 575), size: (240, 25),
+        collection: TrayClickAction::ALL.to_vec(),
+        selected_index: Some(0),
+    )]
+    #[nwg_events(OnComboxBoxSelection: [Self::on_settings_ui_changed])]
+    settings_left_click: nwg::ComboBox<TrayClickAction>,
+
+    #[nwg_control(
+        parent: settings_tab, position: (5, 610), size: (240, 25),
+        text: "Middle click on tray icon:",
+        background_color: TAB_BACKGROUND,
+    )]
+    settings_middle_click_label: nwg::Label,
+
+    #[nwg_control(
+        parent: settings_tab, position: (5, 635), size: (240, 25),
+        collection: TrayClickAction::ALL.to_vec(),
+        selected_index: Some(0),
+    )]
+    #[nwg_events(OnComboxBoxSelection: [Self::on_settings_ui_changed])]
+    settings_middle_click: nwg::ComboBox<TrayClickAction>,
+
     #[nwg_control(parent: window, flags: "VISIBLE")]
     utils_frame: nwg::Frame,
 
@@ -511,6 +562,12 @@ impl ConfigWindow {
                 "If checked then extra context menu items for quick switch shortcuts \
                 will be created in each submenu of the quick switch menu when there are \
                 more than 9 virtual desktops.",
+            )
+            .register(
+                &self.settings_middle_click_label,
+                "Controls the action that will be preformed when the tray icon \
+                is middle clicked. On some Windows 11 versions middle clicks are \
+                registered as left clicks.",
             )
             .build(&mut self.tooltips)?;
         Ok(())
@@ -943,7 +1000,7 @@ impl ConfigWindow {
 }
 /// Window events and helper methods.
 impl ConfigWindow {
-    const MIN_SIZE: (i32, i32) = (300, 820);
+    const MIN_SIZE: (i32, i32) = (300, 880);
 
     pub fn is_closed(&self) -> bool {
         self.is_closed.get() || !window_is_valid(self.window.handle)
@@ -1780,6 +1837,16 @@ impl ConfigWindow {
             .selection()
             .and_then(|ix| self.settings_quick_menu.collection().get(ix).copied())
             .unwrap_or_default();
+        let left_click = self
+            .settings_left_click
+            .selection()
+            .and_then(|ix| self.settings_left_click.collection().get(ix).copied())
+            .unwrap_or_default();
+        let middle_click = self
+            .settings_middle_click
+            .selection()
+            .and_then(|ix| self.settings_middle_click.collection().get(ix).copied())
+            .unwrap_or_default();
         let mut quick_shortcuts_count = 0;
         let mut invalid_quick_shortcut_target = false;
         let quick_switch_menu_shortcuts = Arc::new(
@@ -1829,6 +1896,11 @@ impl ConfigWindow {
                 })
                 .collect::<BTreeMap<_, _>>(),
         );
+        let quick_switch_hotkey = Arc::<str>::from(
+            self.settings_quick_menu_hotkey
+                .text()
+                .trim_matches(['\n', '\r']),
+        );
         tracing::debug!(
             settings_start_as_admin = ?self.settings_start_as_admin.check_state(),
             settings_prevent_flashing_windows = ?self.settings_prevent_flashing_windows.check_state(),
@@ -1838,6 +1910,9 @@ impl ConfigWindow {
             ?quick_switch_menu,
             ?quick_switch_menu_shortcuts,
             settings_quick_menu_shortcuts_in_submenus =? self.settings_quick_menu_shortcuts_in_submenus.check_state(),
+            ?quick_switch_hotkey,
+            ?left_click,
+            ?middle_click,
             "ConfigWindow::on_settings_ui_changed"
         );
         if invalid_quick_shortcut_target
@@ -1870,6 +1945,9 @@ impl ConfigWindow {
                 .settings_quick_menu_shortcuts_in_submenus
                 .check_state()
                 != nwg::CheckBoxState::Checked,
+            quick_switch_hotkey,
+            left_click,
+            middle_click,
             ..prev.clone()
         });
     }
@@ -1933,6 +2011,46 @@ impl ConfigWindow {
             &self.settings_quick_menu_shortcuts_in_submenus,
             !settings.quick_switch_menu_shortcuts_only_in_root,
         );
+        {
+            let new_text = &*settings.quick_switch_hotkey;
+            if new_text != self.settings_quick_menu_hotkey.text() {
+                self.settings_quick_menu_hotkey.set_text(new_text);
+            }
+            self.settings_quick_menu_hotkey_error.set_text(&{
+                if settings.quick_switch_hotkey.is_empty() {
+                    "Hotkey disabled".to_owned()
+                } else {
+                    #[cfg(feature = "global_hotkey")]
+                    {
+                        match global_hotkey::hotkey::HotKey::from_str(&settings.quick_switch_hotkey)
+                        {
+                            Ok(_) => "Valid hotkey".to_owned(),
+                            Err(e) => format!("Invalid hotkey: {e}"),
+                        }
+                    }
+                    #[cfg(not(feature = "global_hotkey"))]
+                    {
+                        "Compiled without hotkey support".to_owned()
+                    }
+                }
+            });
+        }
+        {
+            let index = self
+                .settings_left_click
+                .collection()
+                .iter()
+                .position(|&item| item == settings.left_click);
+            self.settings_left_click.set_selection(index);
+        }
+        {
+            let index = self
+                .settings_middle_click
+                .collection()
+                .iter()
+                .position(|&item| item == settings.middle_click);
+            self.settings_middle_click.set_selection(index);
+        }
     }
     fn sync_quick_shortcuts_from(&self, shortcuts: &BTreeMap<String, u32>) {
         let selection = self.settings_quick_menu_shortcuts.selection();
