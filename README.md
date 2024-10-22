@@ -13,7 +13,7 @@
 [doc-img]: https://img.shields.io/badge/docs.rs-virtual_desktop_manager-4d76ae?style=for-the-badge
 [doc-url]: https://lej77.github.io/virtual-desktop-manager-rs/virtual_desktop_manager/index.html
 
-This is a Win32 application implemented using [`native-windows-gui`] that runs as a tray icon and uses a [fork](https://github.com/Lej77/VirtualDesktopAccessor/tree/patch-windows-10-support) of [Ciantic/VirtualDesktopAccessor - `winvd` library with virtual desktop bindings for Rust](https://github.com/Ciantic/VirtualDesktopAccessor) to move windows between different virtual desktops on Windows 10 and Windows 11.
+This is a Win32 application implemented using [`native-windows-gui`] that runs as a tray icon and uses a [fork](https://github.com/Lej77/VirtualDesktopAccessor) of [Ciantic/VirtualDesktopAccessor - `winvd` library with virtual desktop bindings for Rust](https://github.com/Ciantic/VirtualDesktopAccessor) to move windows between different virtual desktops on Windows 10 and Windows 11.
 
 Note that this program started out as a rewrite of the C# program [Lej77/VirtualDesktopManager: A WinForms application that can move windows between different virtual desktops](https://github.com/Lej77/VirtualDesktopManager).
 
