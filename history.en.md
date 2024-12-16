@@ -1,6 +1,9 @@
 # History
 
 - master/HEAD
+- 0.1.7 (2024-12-15)
+  - Chore: updated `winvd` dependency to version `0.0.48-extra.1`.
+  - Chore: updated `windows` dependency to version `0.58.0`.
 - 0.1.6 (2024-09-25)
   - Fix: hotkey correctly opens quick switch submenu when ctrl key is held.
   - Fix: don't queue reopening of submenus for a long time.
