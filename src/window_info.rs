@@ -181,9 +181,17 @@ pub enum GetAllError {
     VirtualDesktop(vd::Error),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WindowHandle(pub isize);
+impl WindowHandle {
+    pub fn as_hwnd(self) -> HWND {
+        HWND(self.0 as *mut _)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
-    pub handle: HWND,
+    pub handle: WindowHandle,
     pub title: String,
     pub process_id: u32,
     pub process_name: Arc<str>,
@@ -220,7 +228,7 @@ impl WindowInfo {
                     name
                 };
                 Ok(WindowInfo {
-                    handle,
+                    handle: WindowHandle(handle.0 as isize),
                     title,
                     process_id,
                     process_name,

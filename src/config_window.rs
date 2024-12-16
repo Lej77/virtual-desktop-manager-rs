@@ -1011,7 +1011,7 @@ impl ConfigWindow {
         };
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
-                windows::Win32::Foundation::HWND(handle as isize),
+                windows::Win32::Foundation::HWND(handle.cast()),
             );
         }
     }

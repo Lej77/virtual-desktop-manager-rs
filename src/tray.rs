@@ -923,7 +923,7 @@ impl SystemTray {
             // https://stackoverflow.com/questions/19226173/how-to-close-a-context-menu-after-a-timeout
             // https://learn.microsoft.com/sv-se/windows/win32/winmsg/wm-cancelmode?redirectedfrom=MSDN
             let _ = ShowWindow(
-                HWND(self.root().tray_menu.handle.pop_hmenu().unwrap().1 as isize),
+                HWND(self.root().tray_menu.handle.pop_hmenu().unwrap().1.cast()),
                 SW_HIDE,
             );
         }

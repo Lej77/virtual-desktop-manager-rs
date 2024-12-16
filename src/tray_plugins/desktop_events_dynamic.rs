@@ -91,7 +91,8 @@ impl DynamicUiHooks<SystemTray> for DynamicVirtualDesktopEventManager {
         let handle = HWND(
             handle
                 .hwnd()
-                .expect("Root window should have a valid handle") as isize,
+                .expect("Root window should have a valid handle")
+                .cast(),
         );
 
         let res = unsafe { symbols.RegisterPostMessageHook(handle, MESSAGE_OFFSET) };
@@ -128,7 +129,7 @@ impl DynamicUiHooks<SystemTray> for DynamicVirtualDesktopEventManager {
         l: isize,
         _window: nwg::ControlHandle,
     ) -> Option<isize> {
-        if Some(HWND(hwnd)) != self.registered_at.get() {
+        if Some(HWND(hwnd as *mut _)) != self.registered_at.get() {
             return None;
         }
         if msg != MESSAGE_OFFSET {

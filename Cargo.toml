@@ -94,7 +94,7 @@ global_hotkey = ["dep:global-hotkey"]
 # Using fork while waiting for support upstream:
 # - Windows 10 support: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
 # - Animated switching of current desktop
-winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", rev = "8f9b2c3c950d564a368375b1dda08f8c51967cbd", features = [
+winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", tag = "v0.0.48-extra.1", features = [
     "multiple-windows-versions",
 ], optional = true }
 libloading = { version = "0.8", optional = true }
@@ -103,7 +103,7 @@ libloading = { version = "0.8", optional = true }
 native-windows-gui = { version = "1.0.13", features = ["no-styling"] }
 native-windows-derive = "1.0.5"
 muldiv = { version = "0.2", optional = true } # Used by high-dpi code for native-windows-gui
-windows = { version = "0.56.0", features = [
+windows = { version = "0.58.0", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",

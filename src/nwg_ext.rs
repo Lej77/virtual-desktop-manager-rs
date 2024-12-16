@@ -11,6 +11,7 @@ use std::{
     collections::BTreeMap,
     mem,
     ops::ControlFlow,
+    ptr::null_mut,
     sync::{
         atomic::AtomicBool,
         mpsc::{self, RecvTimeoutError},
@@ -143,7 +144,7 @@ pub fn enum_child_windows<F: FnMut(HWND) -> ControlFlow<()>>(parent: Option<HWND
 
     unsafe {
         let _ = EnumChildWindows(
-            parent.unwrap_or(HWND(0)),
+            parent.unwrap_or(HWND(null_mut())),
             Some(enumerate_windows::<F>),
             LPARAM(&mut state as *mut State<F> as isize),
         );
@@ -164,7 +165,7 @@ pub fn menu_item_index_in_parent(item_handle: ControlHandle) -> Option<u32> {
 
     use windows::Win32::UI::WindowsAndMessaging::{GetMenuItemCount, GetMenuItemID, HMENU};
 
-    let parent = HMENU(parent as isize);
+    let parent = HMENU(parent.cast());
     let children_count = unsafe { GetMenuItemCount(parent) };
 
     for i in 0..children_count {
@@ -194,15 +195,15 @@ pub fn menu_index_in_parent(menu_handle: ControlHandle) -> Option<u32> {
     // calls this function on a menu.
     use windows::Win32::UI::WindowsAndMessaging::{GetMenuItemCount, GetSubMenu, HMENU};
 
-    let parent = HMENU(parent as isize);
+    let parent = HMENU(parent.cast());
     let children_count = unsafe { GetMenuItemCount(parent) };
     let mut sub_menu;
 
     for i in 0..children_count {
         sub_menu = unsafe { GetSubMenu(parent, i) };
-        if sub_menu.0 == 0 {
+        if sub_menu.0 == null_mut() {
             continue;
-        } else if sub_menu.0 == (menu as isize) {
+        } else if sub_menu.0 == (menu.cast()) {
             return Some(i as u32);
         }
     }
@@ -275,7 +276,7 @@ pub fn menu_remove(menu: &nwg::Menu) {
 
     use windows::Win32::UI::WindowsAndMessaging::{RemoveMenu, HMENU, MF_BYPOSITION};
 
-    let _ = unsafe { RemoveMenu(HMENU(parent as isize), index, MF_BYPOSITION) };
+    let _ = unsafe { RemoveMenu(HMENU(parent.cast()), index, MF_BYPOSITION) };
 }
 
 /// Finds the current context menu window using an undocumented trick.
@@ -306,7 +307,7 @@ pub fn find_context_menu_window() -> Option<HWND> {
         t
     });
 
-    let window = unsafe { FindWindowW(PCWSTR::from_raw(class_name.as_ptr()), None) };
+    let window = unsafe { FindWindowW(PCWSTR::from_raw(class_name.as_ptr()), None) }.ok()?;
     if window == HWND::default() {
         None
     } else {
@@ -326,7 +327,7 @@ pub fn window_is_valid(handle: nwg::ControlHandle) -> bool {
     let Some(hwnd) = handle.hwnd() else {
         return false;
     };
-    unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(HWND(hwnd as isize)) }.as_bool()
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(HWND(hwnd.cast())) }.as_bool()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -354,7 +355,7 @@ pub fn window_placement(window: &nwg::Window) -> windows::core::Result<WindowPla
         ..WINDOWPLACEMENT::default()
     };
 
-    unsafe { GetWindowPlacement(HWND(handle as isize), &mut info) }.inspect_err(|e| {
+    unsafe { GetWindowPlacement(HWND(handle.cast()), &mut info) }.inspect_err(|e| {
         tracing::error!(error = e.to_string(), "GetWindowPlacement failed");
     })?;
 
@@ -396,7 +397,7 @@ pub fn tray_set_version_4(tray: &nwg::TrayNotification) {
 
     let parent = tray.handle.tray().expect(BAD_HANDLE);
     let mut data = NOTIFYICONDATAW {
-        hWnd: HWND(parent as isize),
+        hWnd: HWND(parent.cast()),
         ..Default::default()
     };
     data.Anonymous.uVersion = NOTIFYICON_VERSION_4;
@@ -421,7 +422,7 @@ pub fn tray_get_rect(tray: &nwg::TrayNotification) -> windows::core::Result<RECT
     let parent = tray.handle.tray().expect(BAD_HANDLE);
 
     let nid = NOTIFYICONIDENTIFIER {
-        hWnd: HWND(parent as isize),
+        hWnd: HWND(parent.cast()),
         cbSize: std::mem::size_of::<NOTIFYICONIDENTIFIER>() as _,
         ..NOTIFYICONIDENTIFIER::default()
     };
@@ -465,8 +466,8 @@ where
         }
         match handle.hwnd() {
             Some(hwnd) => {
-                if unsafe { IsWindow(HWND(hwnd as isize)) }.as_bool() {
-                    HWND(hwnd as isize)
+                if unsafe { IsWindow(HWND(hwnd.cast())) }.as_bool() {
+                    HWND(hwnd.cast())
                 } else {
                     panic!("The window handle is no longer valid. This usually means the control was freed by the OS");
                 }
@@ -539,7 +540,7 @@ pub fn list_view_enable_groups(list_view: &nwg::ListView, enable: bool) {
     };
     let result = unsafe {
         windows::Win32::UI::WindowsAndMessaging::SendMessageW(
-            HWND(handle as isize),
+            HWND(handle.cast()),
             windows::Win32::UI::Controls::LVM_ENABLEGROUPVIEW,
             windows::Win32::Foundation::WPARAM(enable as usize),
             windows::Win32::Foundation::LPARAM(0),
@@ -755,7 +756,7 @@ pub fn list_view_set_group_info(list_view: &nwg::ListView, info: ListViewGroupIn
     let res = unsafe {
         if info.create_new {
             SendMessageW(
-                HWND(handle as isize),
+                HWND(handle.cast()),
                 LVM_INSERTGROUP,
                 // Index where the group is to be added. If this is -1, the group is added at the end of the list.
                 WPARAM((-1_isize) as usize),
@@ -763,7 +764,7 @@ pub fn list_view_set_group_info(list_view: &nwg::ListView, info: ListViewGroupIn
             )
         } else {
             SendMessageW(
-                HWND(handle as isize),
+                HWND(handle.cast()),
                 LVM_SETGROUPINFO,
                 WPARAM(info.group_id as _),
                 LPARAM(&mut item as *mut LVGROUP as _),
@@ -826,7 +827,7 @@ pub fn list_view_item_set_group_id(
 
     let res = unsafe {
         SendMessageW(
-            HWND(handle as isize),
+            HWND(handle.cast()),
             LVM_SETITEMW,
             WPARAM(0),
             LPARAM(&mut item as *mut LVITEMW as _),
@@ -872,7 +873,7 @@ pub fn list_view_item_get_group_id(list_view: &nwg::ListView, row_index: usize) 
 
     let res = unsafe {
         SendMessageW(
-            HWND(handle as isize),
+            HWND(handle.cast()),
             LVM_GETITEMW,
             WPARAM(0),
             LPARAM(&mut item as *mut LVITEMW as _),

@@ -1062,7 +1062,7 @@ where
                         if let Some(hwnd) = window.hwnd() {
                             let mut handlers = vec![event_handler];
                             enum_child_windows(
-                                Some(windows::Win32::Foundation::HWND(hwnd as isize)),
+                                Some(windows::Win32::Foundation::HWND(hwnd.cast())),
                                 |child| {
                                     match nwg::bind_raw_event_handler(
                                         &window,

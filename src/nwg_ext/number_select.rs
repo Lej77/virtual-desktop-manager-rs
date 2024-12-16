@@ -123,11 +123,11 @@ mod wh {
     pub fn get_window_font(handle: HWND) -> HFONT {
         unsafe {
             let h = SendMessageW(handle, WM_GETFONT, WPARAM(0), LPARAM(0));
-            HFONT(h.0)
+            HFONT(h.0 as *mut _)
         }
     }
     pub unsafe fn set_focus(handle: HWND) {
-        SetFocus(handle);
+        _ = SetFocus(handle);
     }
 
     pub unsafe fn get_focus(handle: HWND) -> bool {
@@ -187,7 +187,7 @@ mod wh {
         let _ = GetWindowRect(handle, &mut r);
 
         let parent = GetParent(handle);
-        let (x, y) = if parent.0 != 0 {
+        let (x, y) = if let Ok(parent) = parent {
             let mut pt = POINT {
                 x: r.left,
                 y: r.top,
@@ -292,10 +292,10 @@ fn check_hwnd(handle: &ControlHandle, not_bound: &str, bad_handle: &str) -> HWND
     }
     match handle.hwnd() {
         Some(hwnd) => {
-            if unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(HWND(hwnd as isize)) }
+            if unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(HWND(hwnd.cast())) }
                 .as_bool()
             {
-                HWND(hwnd as isize)
+                HWND(hwnd.cast())
             } else {
                 panic!("The window handle is no longer valid. This usually means the control was freed by the OS");
             }
@@ -391,7 +391,7 @@ impl NumberSelect2 {
     pub fn font(&self) -> Option<Font> {
         let handle = check_hwnd(&self.handle, NOT_BOUND, BAD_HANDLE);
         let font_handle = wh::get_window_font(handle);
-        if font_handle.0 == 0 {
+        if font_handle.0.is_null() {
             None
         } else {
             Some(Font {
@@ -404,7 +404,7 @@ impl NumberSelect2 {
     pub fn set_font(&self, font: Option<&Font>) {
         let handle = check_hwnd(&self.handle, NOT_BOUND, BAD_HANDLE);
         unsafe {
-            wh::set_window_font(handle, font.map(|f| HFONT(f.handle as isize)), true);
+            wh::set_window_font(handle, font.map(|f| HFONT(f.handle.cast())), true);
         }
     }
 
@@ -781,7 +781,7 @@ impl<'a> NumberSelectBuilder<'a> {
         let set_text = move |text: &str| {
             let handle = text_handle.hwnd().unwrap();
             unsafe {
-                wh::set_window_text(HWND(handle as isize), text);
+                wh::set_window_text(HWND(handle.cast()), text);
             }
         };
 
@@ -795,7 +795,7 @@ impl<'a> NumberSelectBuilder<'a> {
                     if message == windows::Win32::UI::WindowsAndMessaging::EN_CHANGE {
                         // Corresponds to `nwg::Event::OnTextInput`
                         let handle = text_handle.hwnd().unwrap();
-                        let text = unsafe { wh::get_window_text(HWND(handle as isize)) };
+                        let text = unsafe { wh::get_window_text(HWND(handle.cast())) };
                         let mut data = handler_data.borrow_mut();
                         let mut valid = false;
                         match &mut *data {

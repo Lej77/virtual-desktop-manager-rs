@@ -86,7 +86,7 @@ impl ThreadInfo {
             for (ix, window) in windows.into_iter().enumerate() {
                 if stop_flashing_globally {
                     windows_to_prevent_flashing.push((
-                        window.handle,
+                        window.handle.as_hwnd(),
                         if let VirtualDesktopInfo::AtDesktop { desktop, .. } =
                             window.virtual_desktop
                         {
@@ -123,15 +123,18 @@ impl ThreadInfo {
                         } else if index == target_desktop_zero_based {
                             // Already at wanted desktop
                         } else if stop_flashing {
-                            windows_to_prevent_flashing.push((window.handle, Some(target)));
-                        } else if let Err(e) = vd::move_window_to_desktop(target, &window.handle) {
+                            windows_to_prevent_flashing
+                                .push((window.handle.as_hwnd(), Some(target)));
+                        } else if let Err(e) =
+                            vd::move_window_to_desktop(target, &window.handle.as_hwnd())
+                        {
                             tracing::warn!(error = ?e, "Failed to move window to target desktop");
                         }
                     }
                 };
                 let unpin_window = || {
                     if window.virtual_desktop.is_window_pinned() {
-                        if let Err(e) = vd::unpin_window(window.handle) {
+                        if let Err(e) = vd::unpin_window(window.handle.as_hwnd()) {
                             tracing::warn!(error = ?e, "Failed to unpin window");
                             return false;
                         }
@@ -142,7 +145,7 @@ impl ThreadInfo {
                     if stop_flashing_globally {
                         windows_to_prevent_flashing.last_mut().unwrap().1 = None;
                     } else if stop_flashing {
-                        windows_to_prevent_flashing.push((window.handle, None));
+                        windows_to_prevent_flashing.push((window.handle.as_hwnd(), None));
                     }
                 };
 
@@ -159,7 +162,7 @@ impl ThreadInfo {
                     }
                     FilterAction::Pin => {
                         if window.virtual_desktop.is_at_desktop() {
-                            if let Err(e) = vd::pin_window(window.handle) {
+                            if let Err(e) = vd::pin_window(window.handle.as_hwnd()) {
                                 tracing::warn!(error = ?e, "Failed to pin window");
                             }
                         }

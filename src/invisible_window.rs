@@ -1,7 +1,7 @@
 //! This module can create an invisible window and focus it to allow for
 //! animation when switching virtual desktop.
 
-use std::{any::TypeId, cell::Cell, fmt, rc::Rc, sync::OnceLock, time::Duration};
+use std::{any::TypeId, cell::Cell, fmt, ptr::null_mut, rc::Rc, sync::OnceLock, time::Duration};
 
 use nwd::{NwgPartial, NwgUi};
 use nwg::{NativeUi, PartialUi};
@@ -36,7 +36,7 @@ impl InvisibleWindow {
                 .handle
                 .hwnd()
                 .expect("Tried to use an invisible window that was't created yet")
-                as isize,
+                .cast(),
         )
     }
     pub fn set_foreground(&self) {
@@ -44,7 +44,7 @@ impl InvisibleWindow {
             return;
         };
         unsafe {
-            let _ = SetForegroundWindow(HWND(handle as isize));
+            let _ = SetForegroundWindow(HWND(handle.cast()));
         }
     }
 }
@@ -314,12 +314,12 @@ impl CustomInvisibleWindow {
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: module.into(),
-            hIcon: HICON(0),
-            hCursor: unsafe { LoadCursorW(HINSTANCE(0), IDC_ARROW) }?,
-            hbrBackground: HBRUSH(COLOR_WINDOW.0 as isize),
+            hIcon: HICON(null_mut()),
+            hCursor: unsafe { LoadCursorW(HINSTANCE(null_mut()), IDC_ARROW) }?,
+            hbrBackground: HBRUSH(COLOR_WINDOW.0 as *mut _),
             lpszMenuName: PCWSTR::null(),
             lpszClassName: PCWSTR::from_raw(class_name.as_ptr()),
-            hIconSm: HICON(0),
+            hIconSm: HICON(null_mut()),
         };
 
         let class_token = unsafe { RegisterClassExW(&class) };
@@ -373,12 +373,12 @@ impl CustomInvisibleWindow {
                 CW_USEDEFAULT,
                 0,
                 0,
-                HWND(0),
-                HMENU(0),
+                HWND(null_mut()),
+                HMENU(null_mut()),
                 module,
                 None,
-            );
-            if handle.0 == 0 {
+            )?;
+            if handle.0.is_null() {
                 return Err(windows::core::Error::from_win32());
             }
             Ok(Self(handle))
@@ -391,7 +391,7 @@ impl CustomInvisibleWindow {
     }
     pub fn set_focus(&self) {
         unsafe {
-            windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(self.0);
+            _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(self.0);
         }
     }
 }
@@ -441,7 +441,7 @@ pub fn switch_desktop_with_invisible_window(
 
     // Move the window to the wanted virtual desktop:
     let try_move =
-        || vd::move_window_to_desktop(desktop, &HWND(ui.window.handle.hwnd().unwrap() as isize));
+        || vd::move_window_to_desktop(desktop, &HWND(ui.window.handle.hwnd().unwrap().cast()));
     if let Err(_e) = try_move() {
         // Sometimes winvd doesn't find the created window. (not often, but still)
         tracing::error!("Failed to find the created window: {_e:?}");
