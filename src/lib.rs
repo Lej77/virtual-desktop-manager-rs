@@ -215,7 +215,7 @@ pub fn run_gui() {
                             smooth,
                         } => {
                             let target = if let Some(target) = target {
-                                // Ensure WinVD is initialized:
+                                // Ensure WinVD is initialized (should not be needed anymore since we manually call CoInitialize):
                                 let _ = vd::get_current_desktop();
                                 target
                             } else if next {
@@ -242,12 +242,23 @@ pub fn run_gui() {
                                 "Switching to desktop index {target}"
                             );
                             if smooth {
-                                nwg::init().expect("Failed to init Native Windows GUI");
-                                invisible_window::switch_desktop_with_invisible_window(
-                                    vd::get_desktop(target),
-                                    None,
-                                )
-                                .expect("Failed to smoothly switch desktop");
+                                if vd::switch_desktop_with_animation(vd::Desktop::from(target)).is_ok() {
+                                    // Windows 11!
+                                    tracing::debug!(
+                                        "Used COM interfaces to animate desktop switch"
+                                    );
+                                    // TODO: maybe try to force windows to refocus the last used window?
+                                } else {
+                                    // Likely Windows 10 which doesn't have a dedicated API for
+                                    // changing desktop with animation, instead we use an invisible
+                                    // window as a workaround.
+                                    nwg::init().expect("Failed to init Native Windows GUI");
+                                    invisible_window::switch_desktop_with_invisible_window(
+                                        vd::get_desktop(target),
+                                        None,
+                                    )
+                                    .expect("Failed to smoothly switch desktop");
+                                }
                             } else {
                                 vd::switch_desktop(vd::Desktop::from(target))
                                     .expect("Failed to switch to target desktop");

@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.8 (2025-05-02)
+  - Feature: support animated desktop switching using command line arguments on Windows 11.
 - 0.1.7 (2024-12-15)
   - Chore: updated `winvd` dependency to version `0.0.48-extra.1`.
   - Chore: updated `windows` dependency to version `0.58.0`.
