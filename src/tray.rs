@@ -57,6 +57,12 @@ pub struct TrayRoot {
     /// The location where we last showed the context menu.
     last_menu_pos: Cell<Option<(i32, i32)>>,
 
+    reshow_tray_menu: Cell<Option<(Instant, MenuPosition)>>,
+
+    #[nwg_control(parent: window)]
+    #[nwg_events(OnNotice: [Self::notify_reshow_tray_menu_delayed])]
+    reshow_tray_menu_delay: FastTimerControl,
+
     /// If the app is auto started with Windows then the taskbar might not exist
     /// when the program is started and if so we need to re-register our tray
     /// icon.
@@ -115,8 +121,7 @@ impl TrayRoot {
             if matches!(vd::get_desktop_count(), Err(_) | Ok(0 | 1))
                 // Recheck count for about 2 minutes after startup in case
                 // virtual desktops haven't been initialized yet:
-                && self.first_created_at.map_or(
-                    false,
+                && self.first_created_at.is_some_and(
                     |created_at| Instant::now()
                         .saturating_duration_since(created_at)
                         > Duration::from_secs(120)
@@ -131,6 +136,17 @@ impl TrayRoot {
                 });
             }
         }
+    }
+
+    fn notify_reshow_tray_menu_delayed(&self) {
+        let Some(tray_ui) = self.tray_ui.get() else {
+            return;
+        };
+        let Some((queued_at, position)) = self.reshow_tray_menu.take() else {
+            return;
+        };
+        tracing::debug!(?position, time_since_requested = ?queued_at.elapsed(), "Re-show context menu");
+        tray_ui.show_menu(position);
     }
 
     #[allow(dead_code)]
@@ -696,6 +712,9 @@ impl SystemTray {
 
         self.show_menu(MenuPosition::AtTrayIcon);
     }
+    pub fn notify_open_menu_at_mouse_position_hotkey(self: &Rc<Self>) {
+        self.reshow_menu(MenuPosition::AtMouseCursor)
+    }
     pub fn notify_settings_changed(self: &Rc<Self>, prev: &Arc<UiSettings>, new: &Arc<UiSettings>) {
         self.dynamic_ui
             .for_each_ui(|plugin| plugin.on_settings_changed(self, prev, new));
@@ -841,6 +860,15 @@ impl SystemTray {
         }
     }
     fn notify_tray_menu_closed(&self) {
+        if let Some((queued_at, _menu_pos)) = self.root().reshow_tray_menu.get() {
+            if queued_at.elapsed() < Duration::from_millis(5000) {
+                // we need to wait a bit longer before we can show a context menu again:
+                self.root()
+                    .reshow_tray_menu_delay
+                    .notify_after(Duration::from_millis(50));
+                return;
+            }
+        }
         // Attempt to give focus back to the most recent window:
         self.hide_menu();
         if let Some(plugin) = self.dynamic_ui.get_ui::<SmoothDesktopSwitcher>() {
@@ -959,6 +987,36 @@ impl SystemTray {
         }
         root.last_menu_pos.set(Some((x, y)));
         root.tray_menu.popup(x, y);
+    }
+    /// Close and then re-open the context menu to ensure it is opened at the requested position.
+    pub fn reshow_menu(&self, position: MenuPosition) {
+        if self.close_menu() {
+            tracing::info!(?position, "Queued re-show of context menu");
+            self.root()
+                .reshow_tray_menu
+                .set(Some((Instant::now(), position)));
+        } else {
+            self.show_menu(position);
+        }
+    }
+    /// Close the context menu if it is open. Returns `true` if an existing menu
+    /// was closed.
+    ///
+    /// Note: the menu won't be closed until you return to the event loop. This
+    /// means that re-opening the menu immediately after will not work.
+    pub fn close_menu(&self) -> bool {
+        tracing::info!("Close context menu");
+
+        use windows::Win32::UI::WindowsAndMessaging::CloseWindow;
+
+        let Some(context_menu_window) = crate::nwg_ext::find_context_menu_window() else {
+            return false;
+        };
+
+        if let Err(e) = unsafe { CloseWindow(context_menu_window) } {
+            tracing::error!("Failed to close context menu: {e}");
+        }
+        true
     }
     pub fn show_notification(&self, title: &str, text: &str) {
         let flags = nwg::TrayNotificationFlags::USER_ICON | nwg::TrayNotificationFlags::LARGE_ICON;

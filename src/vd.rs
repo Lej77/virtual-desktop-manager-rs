@@ -899,7 +899,7 @@ pub async fn stop_flashing_window(
         was_visible = unsafe { ShowWindow(hwnd, SW_HIDE) }.as_bool();
         if was_visible {
             // Wait needed before showing window again to stop flashing windows:
-            // Wait time Minimum: 30ms is quite relaible. Under 20ms nearly always fails.
+            // Wait time Minimum: 30ms is quite reliable. Under 20ms nearly always fails.
             // 100ms can fail if system is under heavy load.
 
             // Wait for window to become hidden:

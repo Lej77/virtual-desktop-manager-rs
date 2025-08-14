@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.9 (2025-08-14)
+  - Feature: new hotkey that opens the context menu at the mouse cursor's position.
 - 0.1.8 (2025-05-02)
   - Feature: support animated desktop switching using command line arguments on Windows 11.
 - 0.1.7 (2024-12-15)

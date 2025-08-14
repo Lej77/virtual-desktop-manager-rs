@@ -1,6 +1,6 @@
 [package]
 name = "virtual-desktop-manager"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Lej77 <31554212+Lej77@users.noreply.github.com>"]
 license = "MIT"
 edition = "2021"
@@ -8,6 +8,11 @@ description = "A Win32 application that helps manage virtual desktops for Window
 publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# If we ever publish to crates.io:
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+
 
 [features]
 default = [
@@ -102,7 +107,7 @@ libloading = { version = "0.8", optional = true }
 # Use Win32 API for GUI to minimize the memory footprint:
 native-windows-gui = { version = "1.0.13", features = ["no-styling"] }
 native-windows-derive = "1.0.5"
-muldiv = { version = "0.2", optional = true } # Used by high-dpi code for native-windows-gui
+muldiv = { version = "1.0", optional = true } # Used by high-dpi code for native-windows-gui
 windows = { version = "0.58.0", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
@@ -111,7 +116,7 @@ windows = { version = "0.58.0", features = [
     "Win32_UI_Controls", # For LVM_SORTITEMSEX
     "Win32_System_LibraryLoader", # For GetModuleHandleW,
     "Win32_UI_Input_KeyboardAndMouse", # For SetFocus
-] } # Manually handle some UI stuff + cast to types used by winvd
+] } # Manually handle some UI stuff + cast to types used by winvd (keep version in sync with winvd)
 
 # Dynamic tray icon (need to generate .ico format due to native-windows-gui):
 imageproc = { version = "0.24.0", default-features = false, optional = true } # Draw text to image. Alternative "text-to-png" (only generates new PNG so can't modify existing)
@@ -120,15 +125,15 @@ ab_glyph = { version = "0.2.23", default-features = false, optional = true }  # 
 text-to-png = { version = "0.2.0", optional = true }                          # Can generate PNG from text but can't combine that with a background
 
 # Logging:
-tracing = "0.1.40"
+tracing = "0.1.41"
 tracing-log = { version = "0.2.0", optional = true }
-tracing-subscriber = { version = "0.3.18", optional = true }
+tracing-subscriber = { version = "0.3.19", optional = true }
 
 # Serialization (settings and exported filters):
 serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
 serde_json = { version = "1.0", optional = true }
-quick-xml = { version = "0.36.1", features = ["serialize"], optional = true }
-serde_path_to_error = { version = "0.1.14", optional = true }
+quick-xml = { version = "0.38.1", features = ["serialize"], optional = true }
+serde_path_to_error = { version = "0.1.17", optional = true }
 
 # CLI (commands):
 clap = { version = "4.5.4", features = [
@@ -142,7 +147,7 @@ deelevate = { version = "0.2.0", optional = true } # More control over starting 
 runas = { version = "1.0.0", optional = true }
 
 # Global keyboard shortcuts:
-global-hotkey = { version = "0.6.2", optional = true }
+global-hotkey = { version = "0.7.0", optional = true }
 
 [build-dependencies]
 # Fixes incompatibility between the `native-windows-gui` and `windows` crates:
@@ -180,6 +185,3 @@ codegen-units = 1
 opt-level = 0
 codegen-units = 16
 
-# If we ever publish to crates.io:
-[package.metadata.docs.rs]
-targets = ["x86_64-pc-windows-msvc"]

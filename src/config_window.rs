@@ -400,6 +400,24 @@ pub struct ConfigWindow {
     #[nwg_events(OnComboxBoxSelection: [Self::on_settings_ui_changed])]
     settings_middle_click: nwg::ComboBox<TrayClickAction>,
 
+    #[nwg_control(
+        parent: settings_tab, position: (5, 680), size: (240, 40),
+        text: "Global hotkey to open context\r\nmenu at current mouse position:",
+        background_color: TAB_BACKGROUND,
+    )]
+    settings_open_menu_at_mouse_pos_hotkey_label: nwg::Label,
+
+    #[nwg_control(parent: settings_tab, position: (5, 680 + 50), size: (240, 28))]
+    #[nwg_events(OnTextInput: [Self::on_settings_ui_changed])]
+    settings_open_menu_at_mouse_pos_hotkey: nwg::TextInput,
+
+    #[nwg_control(parent: settings_tab,
+        position: (5, 680 + 50 + 35), size: (240, 46),
+        readonly: true,
+        flags: "HSCROLL | AUTOHSCROLL | TAB_STOP | VISIBLE",
+    )]
+    settings_open_menu_at_mouse_pos_hotkey_error: nwg::TextBox,
+
     #[nwg_control(parent: window, flags: "VISIBLE")]
     utils_frame: nwg::Frame,
 
@@ -1000,7 +1018,7 @@ impl ConfigWindow {
 }
 /// Window events and helper methods.
 impl ConfigWindow {
-    const MIN_SIZE: (i32, i32) = (300, 880);
+    const MIN_SIZE: (i32, i32) = (300, 1025);
 
     pub fn is_closed(&self) -> bool {
         self.is_closed.get() || !window_is_valid(self.window.handle)
@@ -1251,9 +1269,9 @@ impl ConfigWindow {
                 return;
             }
         };
-        let is_legacy = selected.extension().map_or(false, |ext| {
-            ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("txt")
-        });
+        let is_legacy = selected
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("txt"));
 
         let Some(imported) = (if is_legacy {
             #[cfg(feature = "persist_filters_xml")]
@@ -1901,6 +1919,11 @@ impl ConfigWindow {
                 .text()
                 .trim_matches(['\n', '\r']),
         );
+        let open_menu_at_mouse_pos_hotkey = Arc::<str>::from(
+            self.settings_open_menu_at_mouse_pos_hotkey
+                .text()
+                .trim_matches(['\n', '\r']),
+        );
         tracing::debug!(
             settings_start_as_admin = ?self.settings_start_as_admin.check_state(),
             settings_prevent_flashing_windows = ?self.settings_prevent_flashing_windows.check_state(),
@@ -1913,6 +1936,7 @@ impl ConfigWindow {
             ?quick_switch_hotkey,
             ?left_click,
             ?middle_click,
+            ?open_menu_at_mouse_pos_hotkey,
             "ConfigWindow::on_settings_ui_changed"
         );
         if invalid_quick_shortcut_target
@@ -1948,6 +1972,7 @@ impl ConfigWindow {
             quick_switch_hotkey,
             left_click,
             middle_click,
+            open_menu_at_mouse_pos_hotkey,
             ..prev.clone()
         });
     }
@@ -2050,6 +2075,33 @@ impl ConfigWindow {
                 .iter()
                 .position(|&item| item == settings.middle_click);
             self.settings_middle_click.set_selection(index);
+        }
+        {
+            let new_text = &*settings.open_menu_at_mouse_pos_hotkey;
+            if new_text != self.settings_open_menu_at_mouse_pos_hotkey.text() {
+                self.settings_open_menu_at_mouse_pos_hotkey
+                    .set_text(new_text);
+            }
+            self.settings_open_menu_at_mouse_pos_hotkey_error
+                .set_text(&{
+                    if settings.open_menu_at_mouse_pos_hotkey.is_empty() {
+                        "Hotkey disabled".to_owned()
+                    } else {
+                        #[cfg(feature = "global_hotkey")]
+                        {
+                            match global_hotkey::hotkey::HotKey::from_str(
+                                &settings.open_menu_at_mouse_pos_hotkey,
+                            ) {
+                                Ok(_) => "Valid hotkey".to_owned(),
+                                Err(e) => format!("Invalid hotkey: {e}"),
+                            }
+                        }
+                        #[cfg(not(feature = "global_hotkey"))]
+                        {
+                            "Compiled without hotkey support".to_owned()
+                        }
+                    }
+                });
         }
     }
     fn sync_quick_shortcuts_from(&self, shortcuts: &BTreeMap<String, u32>) {

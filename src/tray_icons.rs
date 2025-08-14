@@ -169,7 +169,7 @@ fn get_empty_image() -> &'static image::DynamicImage {
     static CACHED: OnceLock<image::DynamicImage> = OnceLock::new();
     CACHED.get_or_init(|| {
         let image =
-            image::io::Reader::with_format(Cursor::new(IMAGE_EMPTY), image::ImageFormat::Png)
+            image::ImageReader::with_format(Cursor::new(IMAGE_EMPTY), image::ImageFormat::Png)
                 .decode()
                 .expect("Failed to load embedded PNG");
         // Embedded image is 258 pixels but the `image` crate can only convert

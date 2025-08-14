@@ -59,6 +59,14 @@ macro_rules! default_deserialize {
             #[cfg_attr(feature = "persist_settings", serde(default))] // None if field isn't present
             $field_vis $field_name: Option<$field_ty>,
         )* }
+        impl UiSettingsFallback {
+            /// `true` if all fields have values and so all errors have been fixed.
+            pub fn has_all_fields(&self) -> bool {
+                $(
+                    self.$field_name.is_some()
+                )&&*
+            }
+        }
         impl From<UiSettingsFallback> for $name {
             fn from(value: UiSettingsFallback) -> Self {
                 let mut this = <Self as Default>::default();
@@ -272,6 +280,11 @@ default_deserialize!(
         /// parsed as a [`global_hotkey::hotkey::HotKey`].
         pub quick_switch_hotkey: Arc<str>,
 
+        /// Global keyboard shortcut for opening the context menu at the mouse's
+        /// current position. Quite useful when the keyboard shortcut is used by
+        /// a macro triggered by a mouse button.
+        pub open_menu_at_mouse_pos_hotkey: Arc<str>,
+
         pub left_click: TrayClickAction,
         /// Middle clicks are registered as left clicks for at least some
         /// versions of Windows 11.
@@ -285,7 +298,7 @@ default_deserialize!(
     }
 );
 impl UiSettings {
-    const CURRENT_VERSION: u64 = 1;
+    const CURRENT_VERSION: u64 = 2;
 
     /// Ensure settings are the newest version. Some work might have been done
     /// previously by [`UiSettingsFallback::maybe_migrate`] if initial parsing
@@ -300,7 +313,10 @@ impl UiSettingsFallback {
     /// Handle some migrations to newer setting formats. If all errors could be
     /// explained by version mismatch then returns `true`.
     fn maybe_migrate(&mut self) -> bool {
-        false
+        if self.open_menu_at_mouse_pos_hotkey.is_none() && matches!(self.version, Some(v) if v <= 1) {
+            self.open_menu_at_mouse_pos_hotkey = Some(Arc::from(""));
+        }
+        self.has_all_fields()
     }
 }
 impl Default for UiSettings {
@@ -319,6 +335,7 @@ impl Default for UiSettings {
             ])),
             quick_switch_menu_shortcuts_only_in_root: false,
             quick_switch_hotkey: Arc::from(""),
+            open_menu_at_mouse_pos_hotkey: Arc::from(""),
 
             left_click: TrayClickAction::ToggleConfigurationWindow,
             middle_click: TrayClickAction::ApplyFilters,
