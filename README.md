@@ -93,4 +93,8 @@ Not all of the original features are implemented in the Rust rewrite:
 
 - The Rust program seems to sometimes fail to smoothly switch current desktop on Windows 10 (that is to switch desktop using an animation) while the C# program seems to be less affected by this issue.
 
+- The Rust program uses JSON for its config file and exported filters.
+
+    - It can still import filters from the XML files used by the C# program and even export filters into XML files so it is easy to transition to and from the C# program if needed.
+
 [`VirtualDesktopAccessor.dll`]: https://github.com/Ciantic/VirtualDesktopAccessor/releases/
