@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.11 (2025-11-08)
+  - Feature: apply-filters command defaults to reading filters from the config file next to the executable.
 - 0.1.10 (2025-11-08)
   - Feature: can apply filters from the command line without using the GUI.
 - 0.1.9 (2025-08-14)

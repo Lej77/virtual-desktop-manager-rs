@@ -133,6 +133,11 @@ enum Args {
         #[clap(long)]
         smooth: bool,
     },
+    /// Apply filters which will move windows to specified virtual desktops.
+    ///
+    /// By default this command uses the filters stored in the default config file next to the
+    /// executable but it is possible to override this and explicitly specify a file path from which
+    /// the filters should be read from.
     ApplyFilters {
         /// Where to find the filters that should be applied.
         #[command(flatten)]
@@ -149,7 +154,7 @@ enum Args {
 }
 
 #[derive(clap::Args, Debug)]
-#[group(required = true, multiple = false)]
+#[group(required = false, multiple = false)]
 struct FilterSourceArgs {
     /// Apply filters from an exported filters file.
     #[clap(long)]
@@ -207,7 +212,15 @@ impl FilterSourceArgs {
                     );
                 }
             }
-        } else if let Some(config_path) = &self.config {
+        } else {
+            let config_path;
+            let config_path = match &self.config {
+                Some(v) => v,
+                None => {
+                    config_path = std::env::current_exe()?.with_extension("settings.json");
+                    &config_path
+                }
+            };
             #[cfg(feature = "persist_settings")]
             {
                 let data = std::fs::read_to_string(&config_path)?;
@@ -223,8 +236,7 @@ impl FilterSourceArgs {
                         serde_path_to_error::deserialize(&mut deserializer)
                     }
                 };
-                let settings = result?;
-                Ok(settings
+                Ok(result?
                     .filters
                     .ok_or("Failed to deserialize config file")?
                     .to_vec())
@@ -238,8 +250,6 @@ impl FilterSourceArgs {
                         .into(),
                 )
             }
-        } else {
-            Err("No filter source specified".into())
         }
     }
 }
@@ -249,8 +259,7 @@ fn desktop_event_plugin() -> Box<dyn tray::TrayPlugin> {
     {
         if vd::has_loaded_dynamic_library_successfully() {
             tracing::info!("Using dynamic library to get virtual desktop events");
-            return Box::<tray_plugins::desktop_events_dynamic::DynamicVirtualDesktopEventManager>::default(
-            );
+            return Box::<tray_plugins::desktop_events_dynamic::DynamicVirtualDesktopEventManager>::default();
         }
     }
     #[cfg(feature = "winvd_static")]
@@ -368,7 +377,7 @@ pub fn run_gui() {
                                         vd::get_desktop(target),
                                         None,
                                     )
-                                    .expect("Failed to smoothly switch desktop");
+                                        .expect("Failed to smoothly switch desktop");
                                 }
                             } else {
                                 vd::switch_desktop(vd::Desktop::from(target))
@@ -444,7 +453,7 @@ pub fn run_gui() {
         Box::<tray_plugins::menus::BottomMenuItems>::default(),
         Box::<config_window::ConfigWindow>::default(),
     ])
-    .build_ui()
-    .expect("Failed to build UI");
+        .build_ui()
+        .expect("Failed to build UI");
     nwg::dispatch_thread_events();
 }
