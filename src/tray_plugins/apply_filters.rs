@@ -24,6 +24,110 @@ enum BackgroundAction {
     StopFlashingWindows,
 }
 
+pub fn apply_filters(
+    filters_to_apply: Option<&[WindowFilter]>,
+    stop_flashing: bool,
+    stop_flashing_globally: bool,
+) {
+    let windows = WindowInfo::get_all();
+    let mut windows_to_prevent_flashing =
+        Vec::with_capacity(if stop_flashing || stop_flashing_globally {
+            windows.len()
+        } else {
+            0
+        });
+    for (ix, window) in windows.into_iter().enumerate() {
+        if stop_flashing_globally {
+            windows_to_prevent_flashing.push((
+                window.handle.as_hwnd(),
+                if let VirtualDesktopInfo::AtDesktop { desktop, .. } = window.virtual_desktop {
+                    Some(desktop)
+                } else {
+                    None
+                },
+            ))
+        }
+        let Some(filter_list) = &filters_to_apply else {
+            continue;
+        };
+        let Some(action_info) = WindowFilter::find_first_action(filter_list, ix as i32, &window)
+        else {
+            continue;
+        };
+
+        if window.virtual_desktop.is_app_pinned() {
+            // Don't interact with process that have all of their windows pinned.
+            continue;
+        }
+
+        let mut move_to_target_desktop = || {
+            let Ok(target_desktop_zero_based) = u32::try_from(action_info.target_desktop) else {
+                tracing::error!(info =? action_info, "Tried to target a desktop outside the range of u32");
+                return;
+            };
+            if let VirtualDesktopInfo::AtDesktop { index, .. } = window.virtual_desktop {
+                let target = vd::get_desktop(target_desktop_zero_based);
+                if stop_flashing_globally {
+                    windows_to_prevent_flashing.last_mut().unwrap().1 = Some(target);
+                } else if index == target_desktop_zero_based {
+                    // Already at wanted desktop
+                } else if stop_flashing {
+                    windows_to_prevent_flashing.push((window.handle.as_hwnd(), Some(target)));
+                } else if let Err(e) = vd::move_window_to_desktop(target, &window.handle.as_hwnd())
+                {
+                    tracing::warn!(error = ?e, "Failed to move window to target desktop");
+                }
+            }
+        };
+        let unpin_window = || {
+            if window.virtual_desktop.is_window_pinned() {
+                if let Err(e) = vd::unpin_window(window.handle.as_hwnd()) {
+                    tracing::warn!(error = ?e, "Failed to unpin window");
+                    return false;
+                }
+            }
+            true
+        };
+        let stop_flashing_without_move = |windows_to_prevent_flashing: &mut Vec<(_, _)>| {
+            if stop_flashing_globally {
+                windows_to_prevent_flashing.last_mut().unwrap().1 = None;
+            } else if stop_flashing {
+                windows_to_prevent_flashing.push((window.handle.as_hwnd(), None));
+            }
+        };
+
+        match action_info.action {
+            FilterAction::Move => move_to_target_desktop(),
+            FilterAction::UnpinAndMove => {
+                if unpin_window() {
+                    move_to_target_desktop();
+                }
+            }
+            FilterAction::Unpin => {
+                unpin_window();
+                stop_flashing_without_move(&mut windows_to_prevent_flashing);
+            }
+            FilterAction::Pin => {
+                if window.virtual_desktop.is_at_desktop() {
+                    if let Err(e) = vd::pin_window(window.handle.as_hwnd()) {
+                        tracing::warn!(error = ?e, "Failed to pin window");
+                    }
+                }
+                stop_flashing_without_move(&mut windows_to_prevent_flashing);
+            }
+            FilterAction::Nothing | FilterAction::Disabled => {}
+        }
+    }
+
+    if let Err(e) = vd::stop_flashing_windows_blocking(windows_to_prevent_flashing) {
+        tracing::error!(
+                    error = e.to_string(),
+                    globally = stop_flashing_globally,
+                    "Failed to prevent windows from flashing"
+                );
+    }
+}
+
 struct ThreadInfo {
     join_handle: JoinHandle<()>,
     sender: mpsc::Sender<BackgroundAction>,
@@ -76,109 +180,8 @@ impl ThreadInfo {
                     Err(mpsc::TryRecvError::Disconnected) => break 'outer,
                 }
             }
-            let windows = WindowInfo::get_all();
-            let mut windows_to_prevent_flashing =
-                Vec::with_capacity(if stop_flashing || stop_flashing_globally {
-                    windows.len()
-                } else {
-                    0
-                });
-            for (ix, window) in windows.into_iter().enumerate() {
-                if stop_flashing_globally {
-                    windows_to_prevent_flashing.push((
-                        window.handle.as_hwnd(),
-                        if let VirtualDesktopInfo::AtDesktop { desktop, .. } =
-                            window.virtual_desktop
-                        {
-                            Some(desktop)
-                        } else {
-                            None
-                        },
-                    ))
-                }
-                let Some(filter_list) = &filters_to_apply else {
-                    continue;
-                };
-                let Some(action_info) =
-                    WindowFilter::find_first_action(filter_list, ix as i32, &window)
-                else {
-                    continue;
-                };
 
-                if window.virtual_desktop.is_app_pinned() {
-                    // Don't interact with process that have all of their windows pinned.
-                    continue;
-                }
-
-                let mut move_to_target_desktop = || {
-                    let Ok(target_desktop_zero_based) = u32::try_from(action_info.target_desktop)
-                    else {
-                        tracing::error!(info =? action_info, "Tried to target a desktop outside the range of u32");
-                        return;
-                    };
-                    if let VirtualDesktopInfo::AtDesktop { index, .. } = window.virtual_desktop {
-                        let target = vd::get_desktop(target_desktop_zero_based);
-                        if stop_flashing_globally {
-                            windows_to_prevent_flashing.last_mut().unwrap().1 = Some(target);
-                        } else if index == target_desktop_zero_based {
-                            // Already at wanted desktop
-                        } else if stop_flashing {
-                            windows_to_prevent_flashing
-                                .push((window.handle.as_hwnd(), Some(target)));
-                        } else if let Err(e) =
-                            vd::move_window_to_desktop(target, &window.handle.as_hwnd())
-                        {
-                            tracing::warn!(error = ?e, "Failed to move window to target desktop");
-                        }
-                    }
-                };
-                let unpin_window = || {
-                    if window.virtual_desktop.is_window_pinned() {
-                        if let Err(e) = vd::unpin_window(window.handle.as_hwnd()) {
-                            tracing::warn!(error = ?e, "Failed to unpin window");
-                            return false;
-                        }
-                    }
-                    true
-                };
-                let stop_flashing_without_move = |windows_to_prevent_flashing: &mut Vec<(_, _)>| {
-                    if stop_flashing_globally {
-                        windows_to_prevent_flashing.last_mut().unwrap().1 = None;
-                    } else if stop_flashing {
-                        windows_to_prevent_flashing.push((window.handle.as_hwnd(), None));
-                    }
-                };
-
-                match action_info.action {
-                    FilterAction::Move => move_to_target_desktop(),
-                    FilterAction::UnpinAndMove => {
-                        if unpin_window() {
-                            move_to_target_desktop();
-                        }
-                    }
-                    FilterAction::Unpin => {
-                        unpin_window();
-                        stop_flashing_without_move(&mut windows_to_prevent_flashing);
-                    }
-                    FilterAction::Pin => {
-                        if window.virtual_desktop.is_at_desktop() {
-                            if let Err(e) = vd::pin_window(window.handle.as_hwnd()) {
-                                tracing::warn!(error = ?e, "Failed to pin window");
-                            }
-                        }
-                        stop_flashing_without_move(&mut windows_to_prevent_flashing);
-                    }
-                    FilterAction::Nothing | FilterAction::Disabled => {}
-                }
-            }
-
-            if let Err(e) = vd::stop_flashing_windows_blocking(windows_to_prevent_flashing) {
-                tracing::error!(
-                    error = e.to_string(),
-                    globally = stop_flashing_globally,
-                    "Failed to prevent windows from flashing"
-                );
-            }
+            apply_filters(filters_to_apply.as_deref(), stop_flashing, stop_flashing_globally);
         }
         tracing::info!("ApplyFilters thread exited since the original was dropped");
     }

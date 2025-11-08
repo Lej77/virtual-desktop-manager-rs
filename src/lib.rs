@@ -133,6 +133,115 @@ enum Args {
         #[clap(long)]
         smooth: bool,
     },
+    ApplyFilters {
+        /// Where to find the filters that should be applied.
+        #[command(flatten)]
+        filter_file_source: FilterSourceArgs,
+
+        /// Prevent window from flashing if it was moved by a filter.
+        #[clap(long)]
+        stop_flashing_if_moved: bool,
+
+        /// Stop all windows from flashing.
+        #[clap(long)]
+        stop_flashing: bool,
+    },
+}
+
+#[derive(clap::Args, Debug)]
+#[group(required = true, multiple = false)]
+struct FilterSourceArgs {
+    /// Apply filters from an exported filters file.
+    #[clap(long)]
+    exported_filter: Option<std::path::PathBuf>,
+
+    /// Apply filters from a config file.
+    #[clap(long)]
+    config: Option<std::path::PathBuf>,
+}
+impl FilterSourceArgs {
+    fn load_filters(&self) -> Result<Vec<window_filter::WindowFilter>, Box<dyn std::error::Error>> {
+        if let Some(exported_filter) = &self.exported_filter {
+            let data = std::fs::read_to_string(exported_filter)?;
+            let is_legacy = exported_filter.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("txt")
+            });
+
+            if is_legacy {
+                #[cfg(feature = "persist_filters_xml")]
+                {
+                    Ok(window_filter::WindowFilter::deserialize_from_xml(&data)?)
+                }
+                #[cfg(not(feature = "persist_filters_xml"))]
+                {
+                    return Err(
+                        "This program was compiled without support for legacy XML filters/rules. \
+                        Recompile the program from source with the \"persist_filters_xml\" feature \
+                        in order to support such filter files."
+                            .into(),
+                    );
+                }
+            } else {
+                #[cfg(feature = "persist_filters")]
+                {
+                    let mut deserializer = serde_json::Deserializer::from_str(&data);
+                    let result: Result<window_filter::ExportedWindowFilters, _> = {
+                        #[cfg(not(feature = "serde_path_to_error"))]
+                        {
+                            serde::Deserialize::deserialize(&mut deserializer)
+                        }
+                        #[cfg(feature = "serde_path_to_error")]
+                        {
+                            serde_path_to_error::deserialize(&mut deserializer)
+                        }
+                    };
+                    Ok(result?.migrate_and_get_filters())
+                }
+                #[cfg(not(feature = "persist_filters"))]
+                {
+                    return Err(
+                        "This program was compiled without support for JSON filters/rules. \
+                        Recompile the program from source with the \"persist_filters\" feature \
+                        in order to support such filter files."
+                            .into(),
+                    );
+                }
+            }
+        } else if let Some(config_path) = &self.config {
+            #[cfg(feature = "persist_settings")]
+            {
+                let data = std::fs::read_to_string(&config_path)?;
+
+                let mut deserializer = serde_json::Deserializer::from_str(&data);
+                let result: Result<settings::UiSettingsFallback, _> = {
+                    #[cfg(not(feature = "serde_path_to_error"))]
+                    {
+                        serde::Deserialize::deserialize(&mut deserializer)
+                    }
+                    #[cfg(feature = "serde_path_to_error")]
+                    {
+                        serde_path_to_error::deserialize(&mut deserializer)
+                    }
+                };
+                let settings = result?;
+                Ok(settings
+                    .filters
+                    .ok_or("Failed to deserialize config file")?
+                    .to_vec())
+            }
+            #[cfg(not(feature = "persist_settings"))]
+            {
+                Err(
+                    "This program was compiled without support for reading config files. \
+                    Recompile the program from source with the \"persist_settings\" feature \
+                    in order to support it."
+                        .into(),
+                )
+            }
+        } else {
+            Err("No filter source specified".into())
+        }
+    }
 }
 
 fn desktop_event_plugin() -> Box<dyn tray::TrayPlugin> {
@@ -242,7 +351,9 @@ pub fn run_gui() {
                                 "Switching to desktop index {target}"
                             );
                             if smooth {
-                                if vd::switch_desktop_with_animation(vd::Desktop::from(target)).is_ok() {
+                                if vd::switch_desktop_with_animation(vd::Desktop::from(target))
+                                    .is_ok()
+                                {
                                     // Windows 11!
                                     tracing::debug!(
                                         "Used COM interfaces to animate desktop switch"
@@ -263,6 +374,21 @@ pub fn run_gui() {
                                 vd::switch_desktop(vd::Desktop::from(target))
                                     .expect("Failed to switch to target desktop");
                             }
+                        }
+                        Args::ApplyFilters {
+                            filter_file_source,
+                            stop_flashing_if_moved,
+                            stop_flashing,
+                        } => {
+                            let filters = filter_file_source
+                                .load_filters()
+                                .expect("Failed to load filters");
+
+                            tray_plugins::apply_filters::apply_filters(
+                                Some(filters.as_slice()),
+                                stop_flashing_if_moved,
+                                stop_flashing,
+                            );
                         }
                     }
                     std::process::exit(0);

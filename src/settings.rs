@@ -53,7 +53,7 @@ macro_rules! default_deserialize {
     ) => {
         #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
         #[cfg_attr(feature = "persist_settings", derive(Serialize, Deserialize))]
-        struct UiSettingsFallback { $(
+        pub struct UiSettingsFallback { $(
             $(#[$field_attr])*
             #[cfg_attr(feature = "persist_settings", serde(deserialize_with = "ok_or_none"))] // None if deserialization failed
             #[cfg_attr(feature = "persist_settings", serde(default))] // None if field isn't present

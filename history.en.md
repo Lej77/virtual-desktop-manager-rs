@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.10 (2025-11-08)
+  - Feature: can apply filters from the command line without using the GUI.
 - 0.1.9 (2025-08-14)
   - Feature: new hotkey that opens the context menu at the mouse cursor's position.
 - 0.1.8 (2025-05-02)

@@ -2,3 +2,6 @@
 
 # Ignore the .dll file incase it is used for testing:
 VirtualDesktopAccessor*
+
+# IntelliJ
+.idea
