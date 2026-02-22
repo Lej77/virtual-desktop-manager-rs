@@ -34,22 +34,22 @@ use std::{borrow::Cow, io::Cursor, sync::OnceLock};
 
 #[cfg(feature = "tray_icon_hardcoded")]
 mod hardcoded {
-    pub static ICON1: &[u8] = include_bytes!("icons/triangle1.ico");
-    pub static ICON2: &[u8] = include_bytes!("icons/triangle2.ico");
-    pub static ICON3: &[u8] = include_bytes!("icons/triangle3.ico");
-    pub static ICON4: &[u8] = include_bytes!("icons/triangle4.ico");
-    pub static ICON5: &[u8] = include_bytes!("icons/triangle5.ico");
-    pub static ICON6: &[u8] = include_bytes!("icons/triangle6.ico");
-    pub static ICON7: &[u8] = include_bytes!("icons/triangle7.ico");
-    pub static ICON8: &[u8] = include_bytes!("icons/triangle8.ico");
-    pub static ICON9: &[u8] = include_bytes!("icons/triangle9.ico");
+    pub static ICON1: &[u8] = include_bytes!("../../../icons/triangle1.ico");
+    pub static ICON2: &[u8] = include_bytes!("../../../icons/triangle2.ico");
+    pub static ICON3: &[u8] = include_bytes!("../../../icons/triangle3.ico");
+    pub static ICON4: &[u8] = include_bytes!("../../../icons/triangle4.ico");
+    pub static ICON5: &[u8] = include_bytes!("../../../icons/triangle5.ico");
+    pub static ICON6: &[u8] = include_bytes!("../../../icons/triangle6.ico");
+    pub static ICON7: &[u8] = include_bytes!("../../../icons/triangle7.ico");
+    pub static ICON8: &[u8] = include_bytes!("../../../icons/triangle8.ico");
+    pub static ICON9: &[u8] = include_bytes!("../../../icons/triangle9.ico");
 }
 #[cfg(feature = "tray_icon_hardcoded")]
 pub use hardcoded::*;
 
-pub static ICON_EMPTY: &[u8] = include_bytes!("icons/triangleEmpty.ico");
+pub static ICON_EMPTY: &[u8] = include_bytes!("../../../icons/triangleEmpty.ico");
 #[cfg(feature = "tray_icon_with_background")]
-pub static IMAGE_EMPTY: &[u8] = include_bytes!("icons/triangleEmptyImage.png");
+pub static IMAGE_EMPTY: &[u8] = include_bytes!("../../../icons/triangleEmptyImage.png");
 
 /// This font is only guaranteed to work on numbers.
 ///

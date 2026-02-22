@@ -8,21 +8,21 @@
 extern crate native_windows_derive as nwd;
 extern crate native_windows_gui as nwg;
 
+use crate::tray::TrayPlugin;
+
 #[cfg(feature = "auto_start")]
 mod auto_start;
 pub mod block_on;
 #[cfg(feature = "admin_startup")]
 mod change_elevation;
-mod config_window;
 pub mod dynamic_gui;
 mod invisible_window;
 pub mod nwg_ext;
 mod quick_switch;
-mod settings;
-mod tray;
-mod tray_icons;
+pub mod settings;
+pub mod tray;
 pub mod vd;
-mod window_filter;
+pub mod window_filter;
 pub mod window_info;
 #[cfg(all(feature = "logging", debug_assertions))]
 mod wm_msg_to_string;
@@ -36,7 +36,7 @@ mod tray_plugins {
 }
 
 /// Get a reference to the executable's embedded icon.
-fn exe_icon() -> Option<std::rc::Rc<nwg::Icon>> {
+pub fn exe_icon() -> Option<std::rc::Rc<nwg::Icon>> {
     use std::{cell::OnceCell, rc::Rc};
 
     thread_local! {
@@ -111,48 +111,6 @@ fn register_panic_hook_that_writes_to_file() {
 }
 
 #[cfg(feature = "cli_commands")]
-#[derive(clap::Parser, Debug)]
-#[command(version, about)]
-enum Args {
-    /// Switch to another virtual desktop.
-    Switch {
-        /// The index of the desktop to switch to.
-        #[clap(required_unless_present_any(["next", "back"]))]
-        target: Option<u32>,
-
-        /// Switch to the desktop with an index one more than the current one.
-        #[clap(long)]
-        next: bool,
-
-        /// Switch to the desktop with an index one less than the current one.
-        #[clap(long)]
-        back: bool,
-
-        /// Smooth desktop switching using an animation instead of instant
-        /// switch.
-        #[clap(long)]
-        smooth: bool,
-    },
-    /// Apply filters which will move windows to specified virtual desktops.
-    ///
-    /// By default this command uses the filters stored in the default config file next to the
-    /// executable but it is possible to override this and explicitly specify a file path from which
-    /// the filters should be read from.
-    ApplyFilters {
-        /// Where to find the filters that should be applied.
-        #[command(flatten)]
-        filter_file_source: FilterSourceArgs,
-
-        /// Prevent window from flashing if it was moved by a filter.
-        #[clap(long)]
-        stop_flashing_if_moved: bool,
-
-        /// Stop all windows from flashing.
-        #[clap(long)]
-        stop_flashing: bool,
-    },
-}
-
 #[derive(clap::Args, Debug)]
 #[group(required = false, multiple = false)]
 struct FilterSourceArgs {
@@ -164,6 +122,7 @@ struct FilterSourceArgs {
     #[clap(long)]
     config: Option<std::path::PathBuf>,
 }
+#[cfg(feature = "cli_commands")]
 impl FilterSourceArgs {
     fn load_filters(&self) -> Result<Vec<window_filter::WindowFilter>, Box<dyn std::error::Error>> {
         if let Some(exported_filter) = &self.exported_filter {
@@ -254,6 +213,182 @@ impl FilterSourceArgs {
     }
 }
 
+#[cfg(feature = "cli_commands")]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
+enum Args {
+    /// Switch to another virtual desktop.
+    Switch {
+        /// The index of the desktop to switch to.
+        #[clap(required_unless_present_any(["next", "back"]))]
+        target: Option<u32>,
+
+        /// Switch to the desktop with an index one more than the current one.
+        #[clap(long)]
+        next: bool,
+
+        /// Switch to the desktop with an index one less than the current one.
+        #[clap(long)]
+        back: bool,
+
+        /// Smooth desktop switching using an animation instead of instant
+        /// switch.
+        #[clap(long)]
+        smooth: bool,
+    },
+    /// Apply filters which will move windows to specified virtual desktops.
+    ///
+    /// By default this command uses the filters stored in the default config file next to the
+    /// executable but it is possible to override this and explicitly specify a file path from which
+    /// the filters should be read from.
+    ApplyFilters {
+        /// Where to find the filters that should be applied.
+        #[command(flatten)]
+        filter_file_source: FilterSourceArgs,
+
+        /// Prevent window from flashing if it was moved by a filter.
+        #[clap(long)]
+        stop_flashing_if_moved: bool,
+
+        /// Stop all windows from flashing.
+        #[clap(long)]
+        stop_flashing: bool,
+    },
+}
+#[cfg(feature = "cli_commands")]
+impl Args {
+    pub fn has_command() -> bool {
+        if let Some(cmd) = std::env::args().nth(1) {
+            if <Args as clap::Subcommand>::has_subcommand(&cmd) || cmd.contains("help") {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn from_args() -> Self {
+        use clap::Parser;
+
+        Args::try_parse().unwrap_or_else(|e| {
+            if nwg::init().is_ok() {
+                nwg::error_message(
+                    "Virtual Desktop Manager - Invalid CLI arguments",
+                    &format!("{e}"),
+                );
+            }
+            std::process::exit(2);
+        })
+    }
+    /// Creates an event loop on the current thread and spawns a background thread to call
+    /// [`Self::run`]. Exits the program when finished.
+    pub fn run_and_exit(self) {
+        std::thread::Builder::new()
+            .name("CLI Command Executor".to_owned())
+            .spawn(move || {
+                struct ExitGuard;
+                impl Drop for ExitGuard {
+                    fn drop(&mut self) {
+                        std::process::exit(1);
+                    }
+                }
+                let _exit_guard = ExitGuard;
+
+                self.run();
+
+                std::process::exit(0);
+            })
+            .expect("Failed to spawn background thread to work on CLI command");
+
+        // Start GUI event loop ASAP to prevent spinner next to mouse cursor:
+        match nwg::init() {
+            Ok(()) => {
+                nwg::dispatch_thread_events();
+            }
+            Err(e) => {
+                tracing::error!(error = ?e, "Failed to initialize gui");
+            }
+        }
+        loop {
+            std::thread::park();
+        }
+    }
+    pub fn run(self) {
+        // Old .dll files might not call `CoInitialize` and then not work,
+        // so to be safe we make sure to do that:
+        if let Err(e) = unsafe { windows::Win32::System::Com::CoInitialize(None) }.ok() {
+            tracing::warn!(
+                error = e.to_string(),
+                "Failed to call CoInitialize on CLI Command Executor thread"
+            );
+        }
+
+        match self {
+            Args::Switch {
+                target,
+                next,
+                back,
+                smooth,
+            } => {
+                let target = if let Some(target) = target {
+                    // Ensure WinVD is initialized (should not be needed anymore since we manually call CoInitialize):
+                    let _ = vd::get_current_desktop();
+                    target
+                } else if next {
+                    let count = vd::get_desktop_count().expect("Failed to get desktop count");
+                    let current = vd::get_current_desktop().expect("Failed to get current desktop");
+                    let index = current
+                        .get_index()
+                        .expect("Failed to get index of current desktop");
+                    (index + 1).min(count - 1)
+                } else if back {
+                    let current = vd::get_current_desktop().expect("Failed to get current desktop");
+                    let index: u32 = current
+                        .get_index()
+                        .expect("Failed to get index of current desktop");
+                    index.saturating_sub(1)
+                } else {
+                    unreachable!("Clap should ensure a switch target is specified");
+                };
+                tracing::event!(tracing::Level::INFO, "Switching to desktop index {target}");
+                if smooth {
+                    if vd::switch_desktop_with_animation(vd::Desktop::from(target)).is_ok() {
+                        // Windows 11!
+                        tracing::debug!("Used COM interfaces to animate desktop switch");
+                        // TODO: maybe try to force windows to refocus the last used window?
+                    } else {
+                        // Likely Windows 10 which doesn't have a dedicated API for
+                        // changing desktop with animation, instead we use an invisible
+                        // window as a workaround.
+                        nwg::init().expect("Failed to init Native Windows GUI");
+                        invisible_window::switch_desktop_with_invisible_window(
+                            vd::get_desktop(target),
+                            None,
+                        )
+                        .expect("Failed to smoothly switch desktop");
+                    }
+                } else {
+                    vd::switch_desktop(vd::Desktop::from(target))
+                        .expect("Failed to switch to target desktop");
+                }
+            }
+            Args::ApplyFilters {
+                filter_file_source,
+                stop_flashing_if_moved,
+                stop_flashing,
+            } => {
+                let filters = filter_file_source
+                    .load_filters()
+                    .expect("Failed to load filters");
+
+                tray_plugins::apply_filters::apply_filters(
+                    Some(filters.as_slice()),
+                    stop_flashing_if_moved,
+                    stop_flashing,
+                );
+            }
+        }
+    }
+}
+
 fn desktop_event_plugin() -> Box<dyn tray::TrayPlugin> {
     #[cfg(feature = "winvd_dynamic")]
     {
@@ -273,8 +408,13 @@ fn desktop_event_plugin() -> Box<dyn tray::TrayPlugin> {
     }
 }
 
+pub trait ConfigWindowGui: TrayPlugin {
+    /// Called when the "Configure Filters" context menu item is activated.
+    fn configure_filters(&self, refocus: bool);
+}
+
 /// Start the GUI main loop and show the tray icon.
-pub fn run_gui() {
+pub fn run_gui<G: ConfigWindowGui + Default>() {
     #[cfg(all(feature = "logging", debug_assertions))]
     setup_logging();
     register_panic_hook_that_writes_to_file();
@@ -291,132 +431,8 @@ pub fn run_gui() {
     }
 
     #[cfg(feature = "cli_commands")]
-    if let Some(cmd) = std::env::args().nth(1) {
-        use clap::{Parser, Subcommand};
-
-        if Args::has_subcommand(&cmd) || cmd.contains("help") {
-            let args = Args::try_parse().unwrap_or_else(|e| {
-                if nwg::init().is_ok() {
-                    nwg::error_message(
-                        "Virtual Desktop Manager - Invalid CLI arguments",
-                        &format!("{e}"),
-                    );
-                }
-                std::process::exit(2);
-            });
-            std::thread::Builder::new()
-                .name("CLI Command Executor".to_owned())
-                .spawn(move || {
-                    struct ExitGuard;
-                    impl Drop for ExitGuard {
-                        fn drop(&mut self) {
-                            std::process::exit(1);
-                        }
-                    }
-                    let _exit_guard = ExitGuard;
-
-                    // Old .dll files might not call `CoInitialize` and then not work,
-                    // so to be safe we make sure to do that:
-                    if let Err(e) = unsafe { windows::Win32::System::Com::CoInitialize(None) }.ok()
-                    {
-                        tracing::warn!(
-                            error = e.to_string(),
-                            "Failed to call CoInitialize on CLI Command Executor thread"
-                        );
-                    }
-
-                    match args {
-                        Args::Switch {
-                            target,
-                            next,
-                            back,
-                            smooth,
-                        } => {
-                            let target = if let Some(target) = target {
-                                // Ensure WinVD is initialized (should not be needed anymore since we manually call CoInitialize):
-                                let _ = vd::get_current_desktop();
-                                target
-                            } else if next {
-                                let count =
-                                    vd::get_desktop_count().expect("Failed to get desktop count");
-                                let current = vd::get_current_desktop()
-                                    .expect("Failed to get current desktop");
-                                let index = current
-                                    .get_index()
-                                    .expect("Failed to get index of current desktop");
-                                (index + 1).min(count - 1)
-                            } else if back {
-                                let current = vd::get_current_desktop()
-                                    .expect("Failed to get current desktop");
-                                let index: u32 = current
-                                    .get_index()
-                                    .expect("Failed to get index of current desktop");
-                                index.saturating_sub(1)
-                            } else {
-                                unreachable!("Clap should ensure a switch target is specified");
-                            };
-                            tracing::event!(
-                                tracing::Level::INFO,
-                                "Switching to desktop index {target}"
-                            );
-                            if smooth {
-                                if vd::switch_desktop_with_animation(vd::Desktop::from(target))
-                                    .is_ok()
-                                {
-                                    // Windows 11!
-                                    tracing::debug!(
-                                        "Used COM interfaces to animate desktop switch"
-                                    );
-                                    // TODO: maybe try to force windows to refocus the last used window?
-                                } else {
-                                    // Likely Windows 10 which doesn't have a dedicated API for
-                                    // changing desktop with animation, instead we use an invisible
-                                    // window as a workaround.
-                                    nwg::init().expect("Failed to init Native Windows GUI");
-                                    invisible_window::switch_desktop_with_invisible_window(
-                                        vd::get_desktop(target),
-                                        None,
-                                    )
-                                        .expect("Failed to smoothly switch desktop");
-                                }
-                            } else {
-                                vd::switch_desktop(vd::Desktop::from(target))
-                                    .expect("Failed to switch to target desktop");
-                            }
-                        }
-                        Args::ApplyFilters {
-                            filter_file_source,
-                            stop_flashing_if_moved,
-                            stop_flashing,
-                        } => {
-                            let filters = filter_file_source
-                                .load_filters()
-                                .expect("Failed to load filters");
-
-                            tray_plugins::apply_filters::apply_filters(
-                                Some(filters.as_slice()),
-                                stop_flashing_if_moved,
-                                stop_flashing,
-                            );
-                        }
-                    }
-                    std::process::exit(0);
-                })
-                .expect("Failed to spawn background thread to work on CLI command");
-
-            // Start GUI event loop ASAP to prevent spinner next to mouse cursor:
-            match nwg::init() {
-                Ok(()) => {
-                    nwg::dispatch_thread_events();
-                }
-                Err(e) => {
-                    tracing::error!(error = ?e, "Failed to initialize gui");
-                }
-            }
-            loop {
-                std::thread::park();
-            }
-        }
+    if Args::has_command() {
+        Args::from_args().run_and_exit();
     }
 
     let settings_plugin = Box::new(settings::UiSettingsPlugin::with_save_path_next_to_exe());
@@ -434,26 +450,29 @@ pub fn run_gui() {
 
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
-    let _ui = tray::SystemTray::new(vec![
-        Box::<tray_plugins::panic_notifier::PanicNotifier>::default(),
-        Box::<tray_plugins::apply_filters::ApplyFilters>::default(),
-        settings_plugin,
-        #[cfg(feature = "global_hotkey")]
-        Box::<tray_plugins::hotkeys::HotKeyPlugin>::default(),
-        #[cfg(feature = "auto_start")]
-        Box::<auto_start::AutoStartPlugin>::default(),
-        desktop_event_plugin(),
-        Box::<invisible_window::SmoothDesktopSwitcher>::default(),
-        Box::<tray_plugins::menus::OpenSubmenuPlugin>::default(),
-        Box::<tray_plugins::menus::TopMenuItems>::default(),
-        Box::<tray_plugins::menus::BackspaceAsEscapeAlias>::default(),
-        Box::<tray_plugins::menus::QuickSwitchTopMenu>::default(),
-        Box::<tray_plugins::menus::QuickSwitchMenuUiAdapter>::default(),
-        Box::<tray_plugins::menus::FlatSwitchMenu>::default(),
-        Box::<tray_plugins::menus::BottomMenuItems>::default(),
-        Box::<config_window::ConfigWindow>::default(),
-    ])
-        .build_ui()
-        .expect("Failed to build UI");
+    let _ui = tray::SystemTray::new(
+        vec![
+            Box::<tray_plugins::panic_notifier::PanicNotifier>::default(),
+            Box::<tray_plugins::apply_filters::ApplyFilters>::default(),
+            settings_plugin,
+            #[cfg(feature = "global_hotkey")]
+            Box::<tray_plugins::hotkeys::HotKeyPlugin>::default(),
+            #[cfg(feature = "auto_start")]
+            Box::<auto_start::AutoStartPlugin>::default(),
+            desktop_event_plugin(),
+            Box::<invisible_window::SmoothDesktopSwitcher>::default(),
+            Box::<tray_plugins::menus::OpenSubmenuPlugin>::default(),
+            Box::<tray_plugins::menus::TopMenuItems>::default(),
+            Box::<tray_plugins::menus::BackspaceAsEscapeAlias>::default(),
+            Box::<tray_plugins::menus::QuickSwitchTopMenu>::default(),
+            Box::<tray_plugins::menus::QuickSwitchMenuUiAdapter>::default(),
+            Box::<tray_plugins::menus::FlatSwitchMenu>::default(),
+            Box::<tray_plugins::menus::BottomMenuItems>::default(),
+            Box::<G>::default(),
+        ],
+        |dyn_ui| Some(dyn_ui.get_ui::<G>()?),
+    )
+    .build_ui()
+    .expect("Failed to build UI");
     nwg::dispatch_thread_events();
 }

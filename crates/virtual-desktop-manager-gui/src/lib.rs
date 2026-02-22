@@ -1,3 +1,9 @@
+
+// Note: can't do this renaming in Cargo.toml since the derive macros rely on
+// the package name being `native_windows_gui`.
+extern crate native_windows_derive as nwd;
+extern crate native_windows_gui as nwg;
+
 use std::{
     cell::{Cell, OnceCell, RefCell},
     cmp::Ordering,
@@ -13,7 +19,7 @@ use std::{
     },
 };
 
-use crate::{
+use virtual_desktop_manager_core::{
     dynamic_gui::DynamicUiHooks,
     nwg_ext::{
         list_view_enable_groups, list_view_item_get_group_id, list_view_item_set_group_id,
@@ -27,6 +33,8 @@ use crate::{
     vd,
     window_filter::{ExportedWindowFilters, FilterAction, IntegerRange, TextPattern, WindowFilter},
     window_info::WindowInfo,
+    ConfigWindowGui,
+    exe_icon,
 };
 
 struct BackgroundThread {
@@ -77,7 +85,7 @@ pub struct ConfigWindow {
         position: data.create_window_with_position(),
         maximized: data.create_window_with_maximized(),
         title: "Virtual Desktop Manager",
-        icon: crate::exe_icon().as_deref(),
+        icon: exe_icon().as_deref(),
     )]
     #[nwg_events(
         OnWindowClose: [Self::on_close],
@@ -1164,7 +1172,7 @@ impl ConfigWindow {
                     Recompile the program from source with the \"persist_filters_xml\" feature \
                     in order to support exporting such filter files.",
                 );
-                None
+                None::<String>
             }
         } else {
             #[cfg(feature = "persist_filters")]
@@ -1293,7 +1301,7 @@ impl ConfigWindow {
                     Recompile the program from source with the \"persist_filters_xml\" feature \
                     in order to support such filter files.",
                 );
-                None
+                None::<Vec<WindowFilter>>
             }
         } else {
             #[cfg(feature = "persist_filters")]
@@ -2224,6 +2232,17 @@ impl TrayPlugin for ConfigWindow {
             self.loaded_filters.borrow().as_deref().unwrap_or_default() != &*new.filters;
         if has_changed_filters {
             self.sync_filter_from_settings(Some(new));
+        }
+    }
+}
+impl ConfigWindowGui for ConfigWindow {
+    fn configure_filters(&self, refocus: bool) {
+        if self.is_closed() {
+            self.open_soon.set(true);
+        } else if refocus {
+            self.set_as_foreground_window();
+        } else {
+            self.window.close();
         }
     }
 }

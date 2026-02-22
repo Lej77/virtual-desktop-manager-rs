@@ -1,0 +1,119 @@
+[package]
+name = "virtual-desktop-manager-core"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "A Win32 application that helps manage virtual desktops for Windows 10 and Windows 11"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# If we ever publish to crates.io:
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+
+
+[features]
+
+# A tray icon with only a digit and no background
+tray_icon_text_only = ["virtual-desktop-manager-tray-icon/tray_icon_text_only"]
+# A tray icon with only a digit and no background (+2 MB binary size)
+tray_icon_text_only_alt = ["virtual-desktop-manager-tray-icon/tray_icon_text_only_alt"]
+# Hardcoded icons with backgrounds for desktop 1-9 (better quality than the generated ones)
+tray_icon_hardcoded = ["virtual-desktop-manager-tray-icon/tray_icon_hardcoded"]
+# Generate icons with backgrounds for any desktop index
+tray_icon_with_background = ["virtual-desktop-manager-tray-icon/tray_icon_with_background"]
+
+nwg_high_dpi = ["native-windows-gui/high-dpi", "dep:muldiv"]
+
+# Write events to stderr
+logging = ["dep:tracing-log", "dep:tracing-subscriber"]
+
+# Request admin rights when started (+74 KB binary size)
+admin_startup = ["dep:deelevate"]
+# Create Task Scheduler tasks that starts program with Windows
+auto_start = ["dep:runas"]
+
+# Save and load settings
+persist_settings = ["dep:serde", "dep:serde_json", "persist_filters"]
+
+# Import and export filters:
+persist_filters = ["dep:serde", "dep:serde_json"]
+persist_filters_xml = ["dep:serde", "dep:quick-xml"]
+
+# Better errors when parsing of JSON/XML fails:
+serde_path_to_error = ["dep:serde_path_to_error"]
+
+# Handle commands when started with special CLI arguments (+182 KB binary size)
+cli_commands = ["dep:clap"]
+# Provide info about commands when using `--help` (+66 KB binary size)
+cli_help = [
+    # "clap?/color",
+    "clap?/help",
+    "clap?/usage",
+]
+# Better error messages when CLI argument parsing fails (+48 KB binary size)
+cli_suggestions = ["clap?/error-context", "clap?/suggestions"]
+
+# Include the virtual desktop library in the binary (+78 KB binary size)
+winvd_static = ["dep:winvd"]
+# Support loading the virtual desktop library dynamically at runtime from "VirtualDesktopAccessor.dll"
+# (this allows the binary to support newer Windows versions without being recompiled) (+25 KB binary size)
+winvd_dynamic = ["dep:libloading"]
+
+# Global keyboard shortcuts
+global_hotkey = ["dep:global-hotkey"]
+
+[dependencies]
+# Subcrates
+virtual-desktop-manager-tray-icon = { path = "../virtual-desktop-manager-tray-icon" }
+
+# Using fork while waiting for support upstream:
+# - Windows 10 support: https://github.com/Ciantic/VirtualDesktopAccessor/pull/92
+# - Animated switching of current desktop
+winvd = { git = "https://github.com/Lej77/VirtualDesktopAccessor.git", tag = "v0.0.48-extra.1", features = [
+    "multiple-windows-versions",
+], optional = true }
+libloading = { version = "0.8", optional = true }
+
+# Use Win32 API for GUI to minimize the memory footprint:
+native-windows-gui = { version = "1.0.13", features = ["no-styling"] }
+native-windows-derive = "1.0.5"
+muldiv = { version = "1.0", optional = true } # Used by high-dpi code for native-windows-gui
+windows = { version = "0.58.0", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry", # For RegGetValueW
+    "Win32_UI_Controls", # For LVM_SORTITEMSEX
+    "Win32_System_LibraryLoader", # For GetModuleHandleW,
+    "Win32_UI_Input_KeyboardAndMouse", # For SetFocus
+] } # Manually handle some UI stuff + cast to types used by winvd (keep version in sync with winvd)
+
+# Logging:
+tracing = "0.1.41"
+tracing-log = { version = "0.2.0", optional = true }
+tracing-subscriber = { version = "0.3.19", optional = true }
+
+# Serialization (settings and exported filters):
+serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
+serde_json = { version = "1.0", optional = true }
+quick-xml = { version = "0.38.1", features = ["serialize"], optional = true }
+serde_path_to_error = { version = "0.1.17", optional = true }
+
+# CLI (commands):
+clap = { version = "4.5.4", features = [
+    "std",
+    "derive",
+], default-features = false, optional = true }
+
+# Restart as admin (required to move windows of privileged processes):
+deelevate = { version = "0.2.0", optional = true } # More control over starting program as admin than `runas`
+# Start a subtask as admin (used to register elevated auto start):
+runas = { version = "1.0.0", optional = true }
+
+# Global keyboard shortcuts:
+global-hotkey = { version = "0.7.0", optional = true }
+

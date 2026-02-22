@@ -3,7 +3,7 @@ fn main() {
         panic!("This program can only be compiled for Windows");
     }
 
-    let icon_path = "src/icons/edges - transparent with white.ico";
+    let icon_path = "../../icons/edges - transparent with white.ico";
     let manifest_path = "virtual-desktop-manager.exe.manifest";
 
     println!("cargo::rerun-if-changed=\"Cargo.toml\"");
@@ -16,9 +16,10 @@ fn main() {
     //
     // Without the manifest the program fails to start with exit code:
     // 0xc0000139, STATUS_ENTRYPOINT_NOT_FOUND
-    winres::WindowsResource::new()
-        .set_icon(icon_path)
-        .set_manifest_file(manifest_path)
-        .compile()
-        .unwrap();
+    let mut resources = winres::WindowsResource::new();
+    if cfg!(not(feature = "config_window_gpui")) {
+        // Link error if compiling GPUI and adding this manifest file
+        resources.set_manifest_file(manifest_path);
+    }
+   resources.set_icon(icon_path).compile().unwrap();
 }

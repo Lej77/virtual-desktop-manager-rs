@@ -11,7 +11,7 @@ use std::{
 use windows::Win32::Foundation::HWND;
 
 use crate::{
-    config_window::ConfigWindow,
+    ConfigWindowGui,
     dynamic_gui::{DynamicUi, DynamicUiHooks, DynamicUiOwner, DynamicUiRef, DynamicUiWrapper},
     invisible_window::SmoothDesktopSwitcher,
     nwg_ext::{
@@ -155,7 +155,8 @@ impl TrayRoot {
     }
 
     pub fn update_tray_icon(&self, tray_ui: &Rc<SystemTray>, new_ix: u32) {
-        use crate::{settings::TrayIconType, tray_icons::IconType};
+        use crate::settings::TrayIconType;
+        use virtual_desktop_manager_tray_icon::IconType;
 
         let icon_type = tray_ui.settings().get().tray_icon_type;
         let icon_generator = match icon_type {
@@ -556,9 +557,8 @@ pub struct SystemTray {
     /// Windows has separate modes for Windows itself and other apps. This
     /// tracks whether the taskbar and Windows uses light colors.
     has_light_taskbar: Cell<bool>,
-
     desktop_names: RefCell<Vec<Option<Rc<str>>>>,
-
+    get_config_window: fn(&DynamicUi<Self>) -> Option<Ref<dyn ConfigWindowGui>>,
     pub dynamic_ui: DynamicUi<Self>,
 }
 impl DynamicUiWrapper for SystemTray {
@@ -574,7 +574,7 @@ impl DynamicUiWrapper for SystemTray {
 }
 /// Plugins.
 impl SystemTray {
-    pub fn new(mut plugins: Vec<Box<dyn TrayPlugin>>) -> Rc<Self> {
+    pub fn new(mut plugins: Vec<Box<dyn TrayPlugin>>, get_config_window: fn(&DynamicUi<Self>) -> Option<Ref<dyn ConfigWindowGui>>) -> Rc<Self> {
         plugins.insert(0, Box::<TrayRoot>::default());
         let has_light_taskbar = Self::check_if_light_taskbar();
         tracing::debug!(
@@ -588,7 +588,7 @@ impl SystemTray {
             desktop_index: Cell::new(1),
             desktop_names: RefCell::new(Vec::new()),
             has_light_taskbar: Cell::new(has_light_taskbar),
-
+            get_config_window,
             dynamic_ui,
         });
         this.update_desktop_info();
@@ -1045,14 +1045,8 @@ impl SystemTray {
     }
     pub fn configure_filters(&self, refocus: bool) {
         tracing::info!("SystemTray::configure_filters()");
-        if let Some(config_window) = self.dynamic_ui.get_ui::<ConfigWindow>() {
-            if config_window.is_closed() {
-                config_window.open_soon.set(true);
-            } else if refocus {
-                config_window.set_as_foreground_window();
-            } else {
-                config_window.window.close();
-            }
+        if let Some(config_window) = (self.get_config_window)(&self.dynamic_ui) {
+            config_window.configure_filters(refocus);
         }
     }
     pub fn stop_flashing_windows(&self) {

@@ -1,0 +1,101 @@
+[package]
+name = "virtual-desktop-manager"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "A Win32 application that helps manage virtual desktops for Windows 10 and Windows 11"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# If we ever publish to crates.io:
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+
+
+[features]
+default = [
+    "nwg_high_dpi",
+    "tray_icon_hardcoded",
+    "tray_icon_with_background",
+    "tray_icon_text_only",
+    "logging",
+    "cli_commands",
+    "cli_help",
+    "cli_suggestions",
+    "winvd_static",
+    "winvd_dynamic",
+    "persist_settings",
+    "persist_filters",
+    "persist_filters_xml",
+    "serde_path_to_error",
+    "admin_startup",
+    "auto_start",
+    "global_hotkey",
+    "config_window_native",
+]
+
+# A tray icon with only a digit and no background
+tray_icon_text_only = ["vdm-core/tray_icon_text_only"]
+# A tray icon with only a digit and no background (+2 MB binary size)
+tray_icon_text_only_alt = ["vdm-core/tray_icon_text_only_alt"]
+# Hardcoded icons with backgrounds for desktop 1-9 (better quality than the generated ones)
+tray_icon_hardcoded = ["vdm-core/tray_icon_hardcoded"]
+# Generate icons with backgrounds for any desktop index
+tray_icon_with_background = ["vdm-core/tray_icon_with_background"]
+
+nwg_high_dpi = ["vdm-core/nwg_high_dpi"]
+
+# Write events to stderr
+logging = ["vdm-core/logging"]
+
+# Request admin rights when started (+74 KB binary size)
+admin_startup = ["vdm-core/admin_startup"]
+# Create Task Scheduler tasks that starts program with Windows
+auto_start = ["vdm-core/auto_start"]
+
+# Save and load settings
+persist_settings = ["vdm-core/persist_settings"]
+
+# Import and export filters:
+persist_filters = ["vdm-core/persist_filters", "vdm-gui?/persist_filters", "vdm-gui-gpui?/persist_filters"]
+persist_filters_xml = ["vdm-core/persist_filters_xml", "vdm-gui?/persist_filters_xml", "vdm-gui-gpui?/persist_filters_xml"]
+
+# Better errors when parsing of JSON/XML fails:
+serde_path_to_error = ["vdm-core/serde_path_to_error", "vdm-gui?/serde_path_to_error", "vdm-gui-gpui?/serde_path_to_error"]
+
+# Handle commands when started with special CLI arguments (+182 KB binary size)
+cli_commands = ["vdm-core/cli_commands"]
+# Provide info about commands when using `--help` (+66 KB binary size)
+cli_help = ["vdm-core/cli_help"]
+# Better error messages when CLI argument parsing fails (+48 KB binary size)
+cli_suggestions = ["vdm-core/cli_suggestions"]
+
+# Include the virtual desktop library in the binary (+78 KB binary size)
+winvd_static = ["vdm-core/winvd_static"]
+# Support loading the virtual desktop library dynamically at runtime from "VirtualDesktopAccessor.dll"
+# (this allows the binary to support newer Windows versions without being recompiled) (+25 KB binary size)
+winvd_dynamic = ["vdm-core/winvd_dynamic"]
+
+# Global keyboard shortcuts
+global_hotkey = ["vdm-core/global_hotkey", "vdm-gui?/global_hotkey", "vdm-gui-gpui?/global_hotkey"]
+
+config_window_native = ["dep:vdm-gui"]
+config_window_gpui = ["dep:vdm-gui-gpui"]
+
+[dependencies]
+# Subcrates
+vdm-core = { package = "virtual-desktop-manager-core", path = "../virtual-desktop-manager-core", default-features = false }
+vdm-gui = { package = "virtual-desktop-manager-gui", path = "../virtual-desktop-manager-gui", default-features = false, optional = true }
+vdm-gui-gpui = { package = "virtual-desktop-manager-gui-gpui", path = "../virtual-desktop-manager-gui-gpui", default-features = false, optional = true }
+
+[build-dependencies]
+# Included manifest file fixes incompatibility between the `native-windows-gui` and `windows` crates:
+# https://github.com/gabdube/native-windows-gui/issues/251
+# https://github.com/gabdube/native-windows-gui/issues/241
+#
+# Also adds icon to our exe:
+# https://stackoverflow.com/questions/75038925/how-to-link-an-icon-to-a-rust-windows-application
+winres = "0.1.12"

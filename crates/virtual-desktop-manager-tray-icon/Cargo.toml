@@ -1,0 +1,34 @@
+[package]
+name = "virtual-desktop-manager-tray-icon"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[features]
+# A tray icon with only a digit and no background
+tray_icon_text_only = ["dep:image", "image?/ico"]
+# A tray icon with only a digit and no background (+2 MB binary size)
+tray_icon_text_only_alt = [
+    "dep:text-to-png",
+    "dep:image",
+    "image?/png",
+    "image?/ico",
+]
+# Hardcoded icons with backgrounds for desktop 1-9 (better quality than the generated ones)
+tray_icon_hardcoded = []
+# Generate icons with backgrounds for any desktop index
+tray_icon_with_background = [
+    "dep:image",
+    "dep:imageproc",
+    "dep:ab_glyph",
+    "image?/png",
+    "image?/ico",
+]
+
+[dependencies]
+# Dynamic tray icon (need to generate .ico format due to native-windows-gui):
+imageproc = { version = "0.24.0", default-features = false, optional = true } # Draw text to image. Alternative "text-to-png" (only generates new PNG so can't modify existing)
+image = { version = "0.25.0", default-features = false, optional = true }     # Used by imageproc and for ICO creation (could use the `ico` crate instead)
+ab_glyph = { version = "0.2.23", default-features = false, optional = true }  # Needed to select font for imageproc
+text-to-png = { version = "0.2.0", optional = true }                          # Can generate PNG from text but can't combine that with a background
