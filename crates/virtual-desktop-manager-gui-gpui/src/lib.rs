@@ -1,3 +1,6 @@
+
+extern crate native_windows_gui as nwg;
+
 use gpui::*;
 use gpui_component::{button::*, *};
 use nwg::{ControlHandle, NwgError};
@@ -12,8 +15,6 @@ use virtual_desktop_manager_core::dynamic_gui::{DynamicUiHooks, PartialUiDyn};
 use virtual_desktop_manager_core::settings::UiSettings;
 use virtual_desktop_manager_core::tray::{SystemTray, TrayPlugin};
 use virtual_desktop_manager_core::ConfigWindowGui;
-
-extern crate native_windows_gui as nwg;
 
 pub struct ConfigView;
 
@@ -126,6 +127,15 @@ impl ConfigWindowGui for ConfigWindow {
             if let Some(waker) = mutex_guard.waker.take() {
                 waker.wake();
             }
+        }
+    }
+}
+impl Drop for ConfigWindow {
+    fn drop(&mut self) {
+        let mut guard = self.active_window.get_mut().lock().unwrap();
+        guard.state = State::Quit;
+        if let Some(waker) = guard.waker.take() {
+            waker.wake();
         }
     }
 }

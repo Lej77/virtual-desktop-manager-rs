@@ -60,11 +60,29 @@ auto_start = ["vdm-core/auto_start"]
 persist_settings = ["vdm-core/persist_settings"]
 
 # Import and export filters:
-persist_filters = ["vdm-core/persist_filters", "vdm-gui?/persist_filters", "vdm-gui-gpui?/persist_filters"]
-persist_filters_xml = ["vdm-core/persist_filters_xml", "vdm-gui?/persist_filters_xml", "vdm-gui-gpui?/persist_filters_xml"]
+persist_filters = [
+    "vdm-core/persist_filters",
+    "vdm-gui?/persist_filters",
+    "vdm-gui-gpui?/persist_filters",
+    "vdm-gui-egui?/persist_filters",
+    "vdm-gui-winsafe?/persist_filters",
+]
+persist_filters_xml = [
+    "vdm-core/persist_filters_xml",
+    "vdm-gui?/persist_filters_xml",
+    "vdm-gui-gpui?/persist_filters_xml",
+    "vdm-gui-egui?/persist_filters_xml",
+    "vdm-gui-winsafe?/persist_filters_xml",
+]
 
 # Better errors when parsing of JSON/XML fails:
-serde_path_to_error = ["vdm-core/serde_path_to_error", "vdm-gui?/serde_path_to_error", "vdm-gui-gpui?/serde_path_to_error"]
+serde_path_to_error = [
+    "vdm-core/serde_path_to_error",
+    "vdm-gui?/serde_path_to_error",
+    "vdm-gui-gpui?/serde_path_to_error",
+    "vdm-gui-egui?/serde_path_to_error",
+    "vdm-gui-winsafe?/serde_path_to_error",
+]
 
 # Handle commands when started with special CLI arguments (+182 KB binary size)
 cli_commands = ["vdm-core/cli_commands"]
@@ -80,16 +98,30 @@ winvd_static = ["vdm-core/winvd_static"]
 winvd_dynamic = ["vdm-core/winvd_dynamic"]
 
 # Global keyboard shortcuts
-global_hotkey = ["vdm-core/global_hotkey", "vdm-gui?/global_hotkey", "vdm-gui-gpui?/global_hotkey"]
+global_hotkey = [
+    "vdm-core/global_hotkey",
+    "vdm-gui?/global_hotkey",
+    "vdm-gui-gpui?/global_hotkey",
+    "vdm-gui-egui?/global_hotkey",
+    "vdm-gui-winsafe?/global_hotkey",
+]
 
 config_window_native = ["dep:vdm-gui"]
 config_window_gpui = ["dep:vdm-gui-gpui"]
+config_window_egui = ["dep:vdm-gui-egui"]
+config_window_winsafe = ["dep:vdm-gui-winsafe"]
 
 [dependencies]
+cfg-if = "1.0"
+
 # Subcrates
 vdm-core = { package = "virtual-desktop-manager-core", path = "../virtual-desktop-manager-core", default-features = false }
+
+# GUI subcrates (used for config window) (pick one)
 vdm-gui = { package = "virtual-desktop-manager-gui", path = "../virtual-desktop-manager-gui", default-features = false, optional = true }
 vdm-gui-gpui = { package = "virtual-desktop-manager-gui-gpui", path = "../virtual-desktop-manager-gui-gpui", default-features = false, optional = true }
+vdm-gui-egui = { package = "virtual-desktop-manager-gui-egui", path = "../virtual-desktop-manager-gui-egui", default-features = false, optional = true }
+vdm-gui-winsafe = { package = "virtual-desktop-manager-gui-winsafe", path = "../virtual-desktop-manager-gui-winsafe", default-features = false, optional = true }
 
 [build-dependencies]
 # Included manifest file fixes incompatibility between the `native-windows-gui` and `windows` crates:

@@ -3,7 +3,10 @@ resolver = "2"
 members = [
     "crates/virtual-desktop-manager",
     "crates/virtual-desktop-manager-core",
-    "crates/virtual-desktop-manager-gui", "crates/virtual-desktop-manager-gui-gpui",
+    "crates/virtual-desktop-manager-gui",
+    "crates/virtual-desktop-manager-gui-egui",
+    "crates/virtual-desktop-manager-gui-gpui",
+    "crates/virtual-desktop-manager-gui-winsafe",
     "crates/virtual-desktop-manager-tray-icon",
 ]
 

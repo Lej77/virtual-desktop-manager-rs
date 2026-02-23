@@ -1,0 +1,36 @@
+[package]
+name = "virtual-desktop-manager-gui-winsafe"
+version.workspace = true
+authors.workspace = true
+license = "MIT"
+edition.workspace = true
+repository.workspace = true
+description = "Config window for the virtual desktop manager implemented using the winsafe library."
+
+[features]
+persist_filters = ["dep:serde", "dep:serde_json"]
+persist_filters_xml = ["dep:serde"]
+serde_path_to_error = ["dep:serde_path_to_error"]
+global_hotkey = ["dep:global-hotkey"]
+
+[dependencies]
+virtual-desktop-manager-core = { path = "../virtual-desktop-manager-core", default-features = false }
+native-windows-gui = "1.0.13"
+windows = { version = "0.58.0", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] } # Manually handle some UI stuff
+tracing = "0.1.41"
+global-hotkey = { version = "0.7.0", optional = true }
+
+serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
+serde_json = { version = "1.0", optional = true }
+serde_path_to_error = { version = "0.1.17", optional = true }
+
+# https://github.com/rodrigocfd/winsafe
+winsafe = { version = "0.0.27", features = ["gui"] }
+
+# File prompts:
+rfd = "0.15.0" # File prompts
+raw-window-handle = "0.6.2" # Used to set parent for file prompts (freezes parent window while they are open)
+
