@@ -1,4 +1,3 @@
-
 // Note: can't do this renaming in Cargo.toml since the derive macros rely on
 // the package name being `native_windows_gui`.
 extern crate native_windows_derive as nwd;
@@ -21,6 +20,7 @@ use std::{
 
 use virtual_desktop_manager_core::{
     dynamic_gui::DynamicUiHooks,
+    exe_icon,
     nwg_ext::{
         list_view_enable_groups, list_view_item_get_group_id, list_view_item_set_group_id,
         list_view_set_group_info, list_view_sort_rows, window_is_valid, window_placement,
@@ -34,7 +34,6 @@ use virtual_desktop_manager_core::{
     window_filter::{ExportedWindowFilters, FilterAction, IntegerRange, TextPattern, WindowFilter},
     window_info::WindowInfo,
     ConfigWindowGui,
-    exe_icon,
 };
 
 struct BackgroundThread {
@@ -1264,7 +1263,7 @@ impl ConfigWindow {
         else {
             return;
         };
-        let data = match std::fs::read_to_string(selected.as_path()) {
+        let _data = match std::fs::read_to_string(selected.as_path()) {
             Ok(v) => v,
             Err(e) => {
                 nwg::error_message(
@@ -1284,7 +1283,7 @@ impl ConfigWindow {
         let Some(imported) = (if is_legacy {
             #[cfg(feature = "persist_filters_xml")]
             {
-                WindowFilter::deserialize_from_xml(&data)
+                WindowFilter::deserialize_from_xml(&_data)
                     .inspect_err(|e| {
                         nwg::error_message(
                             "Virtual Desktop Manager - Import error",
@@ -1306,7 +1305,7 @@ impl ConfigWindow {
         } else {
             #[cfg(feature = "persist_filters")]
             {
-                let mut deserializer = serde_json::Deserializer::from_str(&data);
+                let mut deserializer = serde_json::Deserializer::from_str(&_data);
                 let result: Result<ExportedWindowFilters, _> = {
                     #[cfg(not(feature = "serde_path_to_error"))]
                     {
@@ -1743,8 +1742,8 @@ impl ConfigWindow {
             } = filter;
 
             [
-                window_index.one_based_indexes().to_string(),
-                desktop_index.one_based_indexes().to_string(),
+                window_index.into_one_based_indexes().to_string(),
+                desktop_index.into_one_based_indexes().to_string(),
                 window_title.display_escaped_newline_glob().to_string(),
                 process_name.display_escaped_newline_glob().to_string(),
                 filter_index.saturating_add(1).to_string(),

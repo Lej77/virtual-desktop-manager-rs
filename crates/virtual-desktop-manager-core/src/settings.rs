@@ -13,7 +13,7 @@ use std::{
     ops::Deref,
     path::Path,
     rc::Rc,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, Weak},
 };
 #[cfg(feature = "persist_settings")]
 use std::{
@@ -102,16 +102,18 @@ impl AutoStart {
         // Self::Enabled,
         Self::Elevated,
     ];
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            AutoStart::Disabled => "No",
+            AutoStart::Enabled => "Yes",
+            AutoStart::Elevated => "Yes, with admin rights",
+        }
+    }
 }
 /// Used to display options in config window.
 impl fmt::Display for AutoStart {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match *self {
-            AutoStart::Disabled => "No",
-            AutoStart::Enabled => "Yes",
-            AutoStart::Elevated => "Yes, with admin rights",
-        };
-        f.write_str(text)
+        f.write_str(self.as_str())
     }
 }
 
@@ -126,16 +128,18 @@ pub enum QuickSwitchMenu {
 }
 impl QuickSwitchMenu {
     pub const ALL: &'static [Self] = &[Self::Disabled, Self::TopMenu, Self::SubMenu];
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            QuickSwitchMenu::Disabled => "Off",
+            QuickSwitchMenu::TopMenu => "Inside the main context menu",
+            QuickSwitchMenu::SubMenu => "Inside a submenu",
+        }
+    }
 }
 /// Used to display options in config window.
 impl fmt::Display for QuickSwitchMenu {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match *self {
-            QuickSwitchMenu::Disabled => "Off",
-            QuickSwitchMenu::TopMenu => "Inside the main context menu",
-            QuickSwitchMenu::SubMenu => "Inside a submenu",
-        };
-        f.write_str(text)
+        f.write_str(self.as_str())
     }
 }
 
@@ -173,18 +177,20 @@ impl TrayIconType {
         Self::NoBackground2,
         Self::AppIcon,
     ];
-}
-/// Used to display options in config window.
-impl fmt::Display for TrayIconType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match *self {
+    pub const fn as_str(self) -> &'static str {
+        match self {
             TrayIconType::WithBackground => "Hardcoded number inside icon",
             TrayIconType::WithBackgroundNoHardcoded => "Generated number inside icon",
             TrayIconType::NoBackground => "Only black and white number",
             TrayIconType::NoBackground2 => "Only purple number",
             TrayIconType::AppIcon => "Only program icon, no number",
-        };
-        f.write_str(text)
+        }
+    }
+}
+/// Used to display options in config window.
+impl fmt::Display for TrayIconType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -207,18 +213,20 @@ impl TrayClickAction {
         Self::ApplyFilters,
         Self::OpenContextMenu,
     ];
-}
-/// Used to display options in config window.
-impl fmt::Display for TrayClickAction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match *self {
+    pub const fn as_str(self) -> &'static str {
+        match self {
             Self::Disabled => "Disabled",
             Self::StopFlashingWindows => "Stop Flashing Windows",
             Self::ToggleConfigurationWindow => "Open/Close Config Window",
             Self::ApplyFilters => "Apply Filters",
             Self::OpenContextMenu => "Open Context Menu",
-        };
-        f.write_str(text)
+        }
+    }
+}
+/// Used to display options in config window.
+impl fmt::Display for TrayClickAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -298,7 +306,7 @@ default_deserialize!(
     }
 );
 impl UiSettings {
-    const CURRENT_VERSION: u64 = 2;
+    pub const CURRENT_VERSION: u64 = 2;
 
     /// Ensure settings are the newest version. Some work might have been done
     /// previously by [`UiSettingsFallback::maybe_migrate`] if initial parsing
@@ -313,7 +321,8 @@ impl UiSettingsFallback {
     /// Handle some migrations to newer setting formats. If all errors could be
     /// explained by version mismatch then returns `true`.
     fn maybe_migrate(&mut self) -> bool {
-        if self.open_menu_at_mouse_pos_hotkey.is_none() && matches!(self.version, Some(v) if v <= 1) {
+        if self.open_menu_at_mouse_pos_hotkey.is_none() && matches!(self.version, Some(v) if v <= 1)
+        {
             self.open_menu_at_mouse_pos_hotkey = Some(Arc::from(""));
         }
         self.has_all_fields()
@@ -573,6 +582,108 @@ impl Deref for UiSettingsPluginSharedStrong {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct UiSettingsChange {
+    pub old: Arc<UiSettings>,
+    pub new: Arc<UiSettings>,
+}
+impl UiSettingsChange {
+    /// `true` if both [`Self::old`] and [`Self::new`] point to the same settings object. This
+    /// happens if the [`UiSettingsPlugin::set`] sets a new settings value that is equal to the
+    /// current settings, i.e. nothing changed.
+    pub fn is_unchanged(&self) -> bool {
+        Arc::ptr_eq(&self.old, &self.new)
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct UiSettingsChangeDebouncer {
+    /// This debouncer has requested that these values be set as the current settings.
+    /// The last value is the latest one set.
+    new_versions: Vec<Weak<UiSettings>>,
+}
+impl UiSettingsChangeDebouncer {
+    pub const fn new() -> Self {
+        Self {
+            new_versions: Vec::new(),
+        }
+    }
+
+    pub fn gc(&mut self) {
+        self.new_versions.retain(|weak| weak.strong_count() > 0);
+    }
+
+    /// Received notification that the current settings has changed to a new version.
+    ///
+    /// Returns `true` if the new version was expected, i.e. it was previously tracked by
+    /// [`Self::track_unpublished_version`] and no untracked versions have been notified after that
+    /// track request.
+    pub fn notified_new_version(&mut self, new_version: &Arc<UiSettings>) -> bool {
+        let mut found_new = false;
+        self.new_versions.retain(|version| {
+            if found_new {
+                // if found the new version then anything after that is yet to come so remember them
+                // (unless they have been deallocated)
+                Weak::strong_count(version) > 0
+            } else {
+                // if not found new then update found new and return false
+                found_new = std::ptr::addr_eq(version.as_ptr(), Arc::as_ptr(new_version));
+                false
+            }
+        });
+        found_new
+    }
+
+    /// Track a new settings version that is about to be published, for example with a call to
+    /// [`UiSettingsPlugin::set`].
+    pub fn track_unpublished_version(&mut self, new_version: &Arc<UiSettings>) {
+        self.gc();
+        self.new_versions.push(Arc::downgrade(new_version));
+    }
+}
+
+#[derive(Debug)]
+pub enum SetUiSettings<'a> {
+    Owned(UiSettings),
+    Borrowed(&'a UiSettings),
+    Shared(Arc<UiSettings>),
+}
+impl SetUiSettings<'_> {
+    pub fn into_shared(self) -> Arc<UiSettings> {
+        Arc::new(match self {
+            SetUiSettings::Owned(v) => v,
+            SetUiSettings::Borrowed(v) => v.clone(),
+            SetUiSettings::Shared(v) => return v,
+        })
+    }
+}
+impl<'a> PartialEq<Arc<UiSettings>> for SetUiSettings<'a> {
+    fn eq(&self, other: &Arc<UiSettings>) -> bool {
+        let settings: &UiSettings = match self {
+            SetUiSettings::Owned(v) => v,
+            SetUiSettings::Borrowed(v) => v,
+            SetUiSettings::Shared(v) if Arc::ptr_eq(v, other) => return true,
+            SetUiSettings::Shared(v) => v,
+        };
+        *settings == **other
+    }
+}
+impl<'a> From<UiSettings> for SetUiSettings<'a> {
+    fn from(settings: UiSettings) -> Self {
+        SetUiSettings::Owned(settings)
+    }
+}
+impl<'a> From<&'a UiSettings> for SetUiSettings<'a> {
+    fn from(value: &'a UiSettings) -> Self {
+        SetUiSettings::Borrowed(value)
+    }
+}
+impl From<Arc<UiSettings>> for SetUiSettings<'_> {
+    fn from(settings: Arc<UiSettings>) -> Self {
+        SetUiSettings::Shared(settings)
+    }
+}
+
 /// This plugin tracks UI settings.
 #[derive(nwd::NwgPartial, Default)]
 pub struct UiSettingsPlugin {
@@ -590,27 +701,35 @@ impl UiSettingsPlugin {
     pub fn get(&self) -> Arc<UiSettings> {
         Arc::clone(&self.shared.state.lock().unwrap().settings)
     }
-    pub fn set(&self, value: UiSettings) {
-        let new;
-        let prev = {
-            let mut state = self.shared.state.lock().unwrap();
-            if *state.settings == value {
-                return;
+    pub fn set<'a>(&self, value: impl Into<SetUiSettings<'a>>) -> UiSettingsChange {
+        fn inner_set(plugin: &UiSettingsPlugin, value: SetUiSettings<'_>) -> UiSettingsChange {
+            let new;
+            let old = {
+                let mut state = plugin.shared.state.lock().unwrap();
+                if value == state.settings {
+                    return UiSettingsChange {
+                        old: Arc::clone(&state.settings),
+                        new: Arc::clone(&state.settings),
+                    };
+                }
+                new = value.into_shared();
+                let prev = std::mem::replace(&mut state.settings, Arc::clone(&new));
+                plugin.shared.notify_change.notify_all();
+                prev
+            };
+            if let Some(tray) = plugin.tray_ui.get() {
+                tray.notify_settings_changed(&old, &new);
             }
-            new = Arc::new(value);
-            let prev = std::mem::replace(&mut state.settings, Arc::clone(&new));
-            self.shared.notify_change.notify_all();
-            prev
-        };
-        if let Some(tray) = self.tray_ui.get() {
-            tray.notify_settings_changed(&prev, &new);
+            UiSettingsChange { old, new }
         }
+        inner_set(self, value.into())
     }
-    pub fn update(&self, f: impl FnOnce(&UiSettings) -> UiSettings) {
+    /// Convenient helper method around [`Self::get`] followed by [`Self::set`].
+    pub fn update(&self, f: impl FnOnce(&UiSettings) -> UiSettings) -> UiSettingsChange {
         let current = self.get();
         let new = f(&current);
         drop(current);
-        self.set(new);
+        self.set(new)
     }
 
     pub fn with_save_path_next_to_exe() -> Self {

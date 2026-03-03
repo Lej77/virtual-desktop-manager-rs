@@ -5,10 +5,10 @@ cfg_if::cfg_if! {
         type ConfigWindow = vdm_gui_gpui::ConfigWindow;
     } else if #[cfg(feature="config_window_egui")] {
         type ConfigWindow = vdm_gui_egui::ConfigWindow;
-    } else if #[cfg(feature="config_window_winsafe")] {
-        type ConfigWindow = vdm_gui_winsafe::ConfigWindow;
     } else if #[cfg(feature = "config_window_native")] {
         type ConfigWindow = vdm_gui::ConfigWindow;
+    } else if #[cfg(feature="config_window_winsafe")] {
+        type ConfigWindow = vdm_gui_winsafe::ConfigWindow;
     } else {
         compile_error!("Must enable at least one of the \"config_window_\" features");
     }

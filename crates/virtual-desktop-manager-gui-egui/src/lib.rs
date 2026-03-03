@@ -135,36 +135,37 @@ impl ConfigWindowGui for ConfigWindow {
                             .with_any_thread(true)
                             .build()
                             .and_then(|mut event_loop| loop {
-                                let native_options = eframe::NativeOptions {
-                                    viewport: egui::ViewportBuilder {
-                                        title: Some("Virtual Desktop Manager".to_owned()),
-                                        // https://github.com/emilk/egui/discussions/1574
-                                        icon: Some(Arc::new(
-                                            eframe::icon_data::from_png_bytes(include_bytes!(
-                                                "../../../Icons/edges - transparent with white.png"
-                                            ))
-                                            .expect("The icon data must be valid"),
-                                        )),
-                                        // icon: Some(Arc::new(egui::IconData::default())),
-                                        active: Some(true),
+                                {
+                                    let native_options = eframe::NativeOptions {
+                                        viewport: egui::ViewportBuilder {
+                                            title: Some("Virtual Desktop Manager".to_owned()),
+                                            // https://github.com/emilk/egui/discussions/1574
+                                            icon: Some(Arc::new(
+                                                eframe::icon_data::from_png_bytes(include_bytes!(
+                                                    "../../../Icons/edges - transparent with white.png"
+                                                )).expect("The icon data must be valid"),
+                                            )),
+                                            // icon: Some(Arc::new(egui::IconData::default())),
+                                            active: Some(true),
+                                            ..Default::default()
+                                        },
                                         ..Default::default()
-                                    },
-                                    ..Default::default()
-                                };
-                                let mut app = eframe::create_native(
-                                    "Virtual Desktop Manager",
-                                    native_options,
-                                    Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc, shared.clone())))),
-                                    &event_loop,
-                                );
-                                event_loop.run_app_on_demand(&mut app)?;
+                                    };
+                                    let mut app = eframe::create_native(
+                                        "Virtual Desktop Manager",
+                                        native_options,
+                                        Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc, shared.clone())))),
+                                        &event_loop,
+                                    );
+                                    event_loop.run_app_on_demand(&mut app)?;
+                                }
 
                                 let guard = condvar
                                     .wait_while(shared.lock().unwrap(), |shared| {
                                         shared.state == State::Closed
                                     })
                                     .unwrap();
-                                if guard.state == State::Closed {
+                                if guard.state == State::Quit {
                                     break Ok(());
                                 }
                             });

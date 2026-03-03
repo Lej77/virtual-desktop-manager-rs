@@ -161,10 +161,18 @@ impl IntegerRange {
     }
     /// Increment both lower and upper bounds in order to convert from
     /// zero-based to one-based indexes.
-    pub fn one_based_indexes(self) -> Self {
+    pub fn into_one_based_indexes(self) -> Self {
         Self {
             lower_bound: self.lower_bound.map(|v| v.saturating_add(1)),
             upper_bound: self.upper_bound.map(|v| v.saturating_add(1)),
+        }
+    }
+    /// Decrement both lower and upper bounds in order to convert from
+    /// one-based to zero-based indexes.
+    pub fn from_one_based_indexes(self) -> Self {
+        Self {
+            lower_bound: self.lower_bound.map(|v| v.saturating_sub(1)),
+            upper_bound: self.upper_bound.map(|v| v.saturating_sub(1)),
         }
     }
 }
@@ -266,6 +274,11 @@ impl TextPattern {
 impl Default for TextPattern {
     fn default() -> Self {
         Self::new(Arc::from("\n"))
+    }
+}
+impl From<&str> for TextPattern {
+    fn from(value: &str) -> Self {
+        TextPattern::new(Arc::from(value))
     }
 }
 
@@ -525,6 +538,19 @@ pub enum FilterAction {
     Disabled,
 }
 impl FilterAction {
+    pub fn all() -> [FilterAction; 6] {
+        macro_rules! all {
+            ($($name:ident),* $(,)?) => {{
+                let _: fn(Self) = |this| {
+                    match this {
+                        $(Self::$name => (),)*
+                    }
+                };
+                [$(Self::$name,)*]
+            }};
+        }
+        all![Move, UnpinAndMove, Unpin, Pin, Nothing, Disabled]
+    }
     pub fn as_str(&self) -> &'static str {
         match self {
             FilterAction::Move => "Move",

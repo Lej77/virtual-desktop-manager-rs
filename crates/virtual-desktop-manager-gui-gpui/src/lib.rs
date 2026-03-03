@@ -1,4 +1,3 @@
-
 extern crate native_windows_gui as nwg;
 
 use gpui::*;

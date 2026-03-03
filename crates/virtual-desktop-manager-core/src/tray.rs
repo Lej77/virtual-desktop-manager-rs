@@ -11,7 +11,6 @@ use std::{
 use windows::Win32::Foundation::HWND;
 
 use crate::{
-    ConfigWindowGui,
     dynamic_gui::{DynamicUi, DynamicUiHooks, DynamicUiOwner, DynamicUiRef, DynamicUiWrapper},
     invisible_window::SmoothDesktopSwitcher,
     nwg_ext::{
@@ -19,7 +18,7 @@ use crate::{
         windows_msg_for_explorer_restart, FastTimerControl, TrayWindow,
     },
     settings::{TrayClickAction, UiSettings},
-    vd,
+    vd, ConfigWindowGui,
 };
 
 /// Basic state used by the program.
@@ -574,7 +573,10 @@ impl DynamicUiWrapper for SystemTray {
 }
 /// Plugins.
 impl SystemTray {
-    pub fn new(mut plugins: Vec<Box<dyn TrayPlugin>>, get_config_window: fn(&DynamicUi<Self>) -> Option<Ref<dyn ConfigWindowGui>>) -> Rc<Self> {
+    pub fn new(
+        mut plugins: Vec<Box<dyn TrayPlugin>>,
+        get_config_window: fn(&DynamicUi<Self>) -> Option<Ref<dyn ConfigWindowGui>>,
+    ) -> Rc<Self> {
         plugins.insert(0, Box::<TrayRoot>::default());
         let has_light_taskbar = Self::check_if_light_taskbar();
         tracing::debug!(

@@ -34,7 +34,7 @@ default = [
     "admin_startup",
     "auto_start",
     "global_hotkey",
-    "config_window_native",
+    "config_window_winsafe",
 ]
 
 # A tray icon with only a digit and no background

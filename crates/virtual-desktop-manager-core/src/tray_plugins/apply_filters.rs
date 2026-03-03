@@ -121,10 +121,10 @@ pub fn apply_filters(
 
     if let Err(e) = vd::stop_flashing_windows_blocking(windows_to_prevent_flashing) {
         tracing::error!(
-                    error = e.to_string(),
-                    globally = stop_flashing_globally,
-                    "Failed to prevent windows from flashing"
-                );
+            error = e.to_string(),
+            globally = stop_flashing_globally,
+            "Failed to prevent windows from flashing"
+        );
     }
 }
 
@@ -181,7 +181,11 @@ impl ThreadInfo {
                 }
             }
 
-            apply_filters(filters_to_apply.as_deref(), stop_flashing, stop_flashing_globally);
+            apply_filters(
+                filters_to_apply.as_deref(),
+                stop_flashing,
+                stop_flashing_globally,
+            );
         }
         tracing::info!("ApplyFilters thread exited since the original was dropped");
     }

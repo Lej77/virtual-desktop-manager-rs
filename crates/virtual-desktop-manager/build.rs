@@ -21,5 +21,5 @@ fn main() {
         // Link error if compiling GPUI and adding this manifest file
         resources.set_manifest_file(manifest_path);
     }
-   resources.set_icon(icon_path).compile().unwrap();
+    resources.set_icon(icon_path).compile().unwrap();
 }

@@ -1,6 +1,8 @@
 # History
 
 - master/HEAD
+- 0.1.12 (2026-03-03)
+  - Fix: rewritten config window GUI using the [`winsafe`](https://crates.io/crates/winsafe) crate to fix crashes (see [issue #1](https://github.com/Lej77/virtual-desktop-manager-rs/issues/1)).  
 - 0.1.11 (2025-11-08)
   - Feature: apply-filters command defaults to reading filters from the config file next to the executable.
 - 0.1.10 (2025-11-08)
